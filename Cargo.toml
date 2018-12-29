@@ -1,0 +1,12 @@
+[package]
+name = "flashback"
+version = "0.0.1"
+authors = ["Eduard-Mihai Burtescu <edy.burt@gmail.com>"]
+edition = "2018"
+repository = "https://github.com/lykenware/flashback"
+license = "MIT/Apache-2.0"
+keywords = ["Flash", "SWF"]
+readme = "README.md"
+description = "Adobe Flash / SWF preservation tools."
+
+[dependencies]
