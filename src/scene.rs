@@ -49,14 +49,14 @@ fn default_matrix() -> swf::Matrix {
 }
 
 pub struct Object {
-    pub character: CharacterId,
+    pub show: bool,
     pub matrix: swf::Matrix,
 }
 
-impl Object {
-    pub fn new(character: CharacterId) -> Self {
+impl Default for Object {
+    fn default() -> Self {
         Object {
-            character,
+            show: false,
             matrix: default_matrix(),
         }
     }
@@ -65,7 +65,7 @@ impl Object {
 impl Clone for Object {
     fn clone(&self) -> Self {
         Object {
-            character: self.character,
+            show: self.show,
             matrix: copy_matrix(&self.matrix),
         }
     }
@@ -73,7 +73,7 @@ impl Clone for Object {
 
 #[derive(Default)]
 pub struct Layer {
-    pub frames: BTreeMap<Frame, Option<Object>>,
+    pub frames: BTreeMap<Frame, Object>,
 }
 
 impl Layer {
@@ -83,68 +83,88 @@ impl Layer {
 
     pub fn object_at_frame(&self, frame: Frame) -> Option<&Object> {
         // Find the last frame with a change to this object.
-        self.frames
-            .range(..=frame)
-            .rev()
-            .next()
-            .and_then(|(_, obj)| obj.as_ref())
+        self.frames.range(..=frame).rev().next().map(|(_, obj)| obj)
     }
 }
 
 #[derive(Default)]
 pub struct Scene {
-    pub layers: BTreeMap<Depth, Layer>,
+    pub layers: BTreeMap<(Depth, CharacterId), Layer>,
 }
 
 #[derive(Default)]
 pub struct SceneBuilder {
     scene: Scene,
+    active_characters: BTreeMap<Depth, CharacterId>,
     current_frame: Frame,
 }
 
 impl SceneBuilder {
     pub fn place_object(&mut self, place: &swf::tags::PlaceObject) {
-        let layer = self.scene.layers.entry(Depth(place.depth)).or_default();
+        let depth = Depth(place.depth);
+
+        let active_character = self.active_characters.entry(depth).or_insert_with(|| {
+            place
+                .character_id
+                .map(CharacterId)
+                .expect("SceneBuilder::place_object: missing `character_id`")
+        });
+        if let Some(character) = place.character_id.map(CharacterId) {
+            if place.is_move {
+                self.scene
+                    .layers
+                    .get_mut(&(depth, *active_character))
+                    .unwrap()
+                    .frames
+                    .insert(self.current_frame, Object::default());
+                *active_character = character;
+            } else {
+                assert_eq!(*active_character, character);
+            }
+        }
+
+        let layer = self
+            .scene
+            .layers
+            .entry((depth, *active_character))
+            .or_default();
 
         // Find the last changed frame for this object, if it's not
         // the current one, and copy its state of the object.
         let prev_obj = match layer.frames.range(..=self.current_frame).rev().next() {
             Some((&frame, obj)) if frame != self.current_frame => obj.clone(),
-            _ => None,
+            _ => Object::default(),
         };
 
-        let obj = layer
-            .frames
-            .entry(self.current_frame)
-            .or_insert(prev_obj)
-            .get_or_insert_with(|| {
-                Object::new(
-                    place
-                        .character_id
-                        .map(CharacterId)
-                        .expect("SceneBuilder::place_object: missing `character_id`"),
-                )
-            });
+        let obj = layer.frames.entry(self.current_frame).or_insert(prev_obj);
 
-        if let Some(character) = place.character_id.map(CharacterId) {
-            if place.is_move {
-                *obj = Object::new(character);
-            } else {
-                assert_eq!(obj.character, character);
-            }
+        if place.is_move && place.character_id.is_some() {
+            *obj = Object::default();
         }
+        obj.show = true;
         if let Some(matrix) = &place.matrix {
             obj.matrix = copy_matrix(matrix);
         }
     }
 
     pub fn remove_object(&mut self, remove: &swf::tags::RemoveObject) {
+        let depth = Depth(remove.depth);
+
+        let active_character = self
+            .active_characters
+            .remove(&depth)
+            .expect("SceneBuilder::remove_object: no object at depth level");
+
+        if let Some(character) = remove.character_id.map(CharacterId) {
+            assert_eq!(active_character, character);
+        }
+
         self.scene
             .layers
-            .get_mut(&Depth(remove.depth))
-            .expect("SceneBuilder::remove_object: no object at depth level")
+            .get_mut(&(depth, active_character))
+            .unwrap()
             .frames
-            .insert(self.current_frame, None);
+            .insert(self.current_frame, Object::default());
     }
 
     pub fn advance_frame(&mut self) {

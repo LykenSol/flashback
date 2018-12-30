@@ -1,7 +1,9 @@
 use crate::dictionary::{Character, CharacterId, Dictionary};
-use crate::scene::{Frame, Object, SceneBuilder};
-use crate::shape::{Line, Point, Shape};
-use svg::node::element::{path, Animate, Group, Path, Rectangle};
+use crate::scene::{Frame, SceneBuilder};
+use crate::shape::{Line, Shape};
+use std::f64::consts::PI;
+use std::fmt::Write;
+use svg::node::element::{path, Animate, AnimateTransform, Group, Path, Rectangle};
 use swf_tree as swf;
 
 // FIXME(eddyb) upstream these as methods on `swf-fixed` types.
@@ -63,80 +65,186 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
     let frame_duration = 1.0 / frame_rate;
     let movie_duration = frame_count.0 as f64 * frame_duration;
 
-    // HACK(eddyb) fake a `<set>` animation which
-    // the `svg` crate doesn't directly support.
-    let animate_set = |frame: Frame, attr, val| {
-        Animate::new()
-            .set("attributeName", attr)
-            .set("to", val)
-            .set("begin", (frame.0 as f64 * frame_duration) - movie_duration)
-            .set("dur", movie_duration)
-            .set("calcMode", "discrete")
-            .set("repeatCount", "indefinite")
-    };
-
-    for layer in scene.layers.values() {
-        let mut frame = Frame(0);
-        while frame < frame_count {
-            // Process multiple identical frames as one (longer) frame.
-            let mut next_frame = frame;
-            loop {
-                next_frame = next_frame + Frame(1);
-                if next_frame >= frame_count {
-                    break;
-                }
-                if layer.any_changes_in_frame(next_frame) {
-                    break;
-                }
+    for (&(_, character), layer) in &scene.layers {
+        let character = match dictionary.get(character) {
+            Some(character) => character,
+            None => {
+                eprintln!("missing dictionary entry for {:?}", character);
+                continue;
             }
+        };
 
-            if let Some(obj) = layer.object_at_frame(frame) {
-                let mut obj = render_object(&dictionary, obj);
+        let mut opacity = Animation::new(frame_count, movie_duration, 1);
 
-                if (frame, next_frame) != (Frame(0), frame_count) {
-                    obj = obj
-                        .set("opacity", 0)
-                        .add(animate_set(frame, "opacity", 1))
-                        .add(animate_set(next_frame, "opacity", 0));
-                }
-                svg_document = svg_document.add(obj);
-            }
+        let mut scale = Animation::new(frame_count, movie_duration, (1.0, 1.0));
+        let mut skew_y = Animation::new(frame_count, movie_duration, 0.0);
+        let mut rotate = Animation::new(frame_count, movie_duration, 0.0);
+        let mut translate = Animation::new(frame_count, movie_duration, (0, 0));
 
-            frame = next_frame;
+        if !layer.frames.contains_key(&Frame(0)) {
+            opacity.add(Frame(0), 0);
         }
+        for (&frame, obj) in &layer.frames {
+            opacity.add(frame, obj.show as u8);
+            if !obj.show {
+                continue;
+            }
+
+            let transform = Transform::from(&obj.matrix);
+
+            scale.add(frame, transform.scale);
+            skew_y.add(frame, transform.skew_y);
+            rotate.add(frame, transform.rotate);
+            translate.add(frame, transform.translate);
+        }
+
+        let mut g = render_character(character);
+        g = opacity.animate(g, "opacity");
+
+        g = scale.animate_transform(g, "scale");
+        g = skew_y.animate_transform(g, "skewY");
+        g = rotate.animate_transform(g, "rotate");
+        g = translate.animate_transform(g, "translate");
+
+        svg_document = svg_document.add(g);
     }
 
     svg_document
 }
 
+struct Animation<T> {
+    frame_count: Frame,
+    movie_duration: f64,
+
+    key_times: String,
+    values: String,
+    current_value: T,
+}
+
+impl<T: Copy + PartialEq + Into<svg::node::Value>> Animation<T> {
+    fn new(frame_count: Frame, movie_duration: f64, initial_value: T) -> Self {
+        Animation {
+            frame_count,
+            movie_duration,
+            key_times: String::new(),
+            values: String::new(),
+            current_value: initial_value,
+        }
+    }
+
+    fn add(&mut self, frame: Frame, value: T) {
+        if self.current_value == value {
+            return;
+        }
+        if frame != Frame(0) && self.key_times.is_empty() {
+            self.add_without_checking(Frame(0), self.current_value);
+        }
+        self.add_without_checking(frame, value);
+    }
+
+    fn add_without_checking(&mut self, frame: Frame, value: T) {
+        let t = frame.0 as f64 / self.frame_count.0 as f64;
+        if !self.key_times.is_empty() {
+            self.key_times.push(';');
+            self.values.push(';');
+        }
+        let _ = write!(self.key_times, "{}", t);
+        let _ = write!(self.values, "{}", Into::<svg::node::Value>::into(value));
+        self.current_value = value;
+    }
+
+    fn animate(self, g: Group, attr: &str) -> Group {
+        match &self.key_times[..] {
+            "" => g,
+            "0" => g.set(attr, self.values),
+            _ => g.add(
+                Animate::new()
+                    .set("attributeName", attr)
+                    .set("keyTimes", self.key_times)
+                    .set("values", self.values)
+                    .set("calcMode", "discrete")
+                    .set("repeatCount", "indefinite")
+                    .set("dur", self.movie_duration),
+            ),
+        }
+    }
+
+    fn animate_transform(self, g: Group, ty: &str) -> Group {
+        match &self.key_times[..] {
+            "" => g,
+            // HACK(eddyb) perhaps there's a way to avoid having
+            // one `<g>` nesting per transform, but right now it's
+            // the only way I can compe up with to compose them.
+            //
+            // NB: if the transforms were grouped then they could use
+            // one "transform" attribute for everything instead.
+            "0" => Group::new()
+                .add(g)
+                .set("transform", format!("{}({})", ty, self.values)),
+            _ => Group::new().add(g).add(
+                AnimateTransform::new()
+                    .set("attributeName", "transform")
+                    .set("type", ty)
+                    .set("keyTimes", self.key_times)
+                    .set("values", self.values)
+                    .set("calcMode", "discrete")
+                    .set("repeatCount", "indefinite")
+                    .set("dur", self.movie_duration),
+            ),
+        }
+    }
+}
+
+#[derive(Copy, Clone)]
+struct Transform {
+    scale: (f64, f64),
+    skew_y: f64,
+    rotate: f64,
+    translate: (i32, i32),
+}
+
+impl<'a> From<&'a swf::Matrix> for Transform {
+    fn from(matrix: &swf::Matrix) -> Self {
+        let a = sfixed16p16_to_f64(&matrix.scale_x);
+        let b = sfixed16p16_to_f64(&matrix.rotate_skew0);
+        let c = sfixed16p16_to_f64(&matrix.rotate_skew1);
+        let d = sfixed16p16_to_f64(&matrix.scale_y);
+
+        let rotate = b.atan2(a);
+        let skew_y = d.atan2(c) - PI / 2.0 - rotate;
+
+        let sx = (a * a + b * b).sqrt();
+        let sy = (c * c + d * d).sqrt() * skew_y.cos();
+
+        Transform {
+            scale: (sx, sy),
+            skew_y: skew_y * 180.0 / PI,
+            rotate: rotate * 180.0 / PI,
+            translate: (matrix.translate_x, matrix.translate_y),
+        }
+    }
+}
+
+impl Into<svg::node::Value> for Transform {
+    fn into(self) -> svg::node::Value {
+        let (tx, ty) = self.translate;
+        let (sx, sy) = self.scale;
+        format!(
+            "translate({} {}) rotate({}) skewY({}) scale({} {})",
+            tx, ty, self.rotate, self.skew_y, sx, sy,
+        )
+        .into()
+    }
+}
+
 // TODO(eddyb) render frames as SVG animations of each character
 // at a depth level, which only gets its transform animated.
-fn render_object(dictionary: &Dictionary, obj: &Object) -> Group {
-    let transform = {
-        // TODO(eddyb) try to do this with fixed-point arithmetic,
-        // and/or with SVG transforms instead of baking it.
-        let sx = sfixed16p16_to_f64(&obj.matrix.scale_x);
-        let sy = sfixed16p16_to_f64(&obj.matrix.scale_y);
-        let rsk0 = sfixed16p16_to_f64(&obj.matrix.rotate_skew0);
-        let rsk1 = sfixed16p16_to_f64(&obj.matrix.rotate_skew1);
-        let translate = Point {
-            x: obj.matrix.translate_x,
-            y: obj.matrix.translate_y,
-        };
-
-        move |Point { x, y }| {
-            let (x, y) = (x as f64, y as f64);
-            let (x, y) = (x * sx + y * rsk1, x * rsk0 + y * sy);
-            let (x, y) = (x.round() as i32, y.round() as i32);
-            Point { x, y } + translate
-        }
-    };
-
+fn render_character(character: &Character) -> Group {
     let mut g = Group::new();
-    match dictionary.get(obj.character) {
-        Some(Character::Shape(shape)) => {
-            // TODO(eddyb) confirm/infirm the correctness of this.
-            let transform = |p| transform(p - shape.center) + shape.center;
+
+    match character {
+        Character::Shape(shape) => {
+            // TODO(eddyb) do the transforms need to take `shape.center` into account?
 
             let fill_color = |style: &swf::FillStyle| {
                 match style {
@@ -156,12 +264,12 @@ fn render_object(dictionary: &Dictionary, obj: &Object) -> Group {
             };
 
             let path_data = |path: &[Line]| {
-                let start = transform(path.first()?.from);
+                let start = path.first()?.from;
 
                 let mut data = path::Data::new().move_to(start.x_y());
                 let mut pos = start;
 
-                for line in path.iter().map(|line| line.map_points(transform)) {
+                for line in path {
                     if line.from != pos {
                         data = data.move_to(line.from.x_y());
                     }
@@ -213,12 +321,10 @@ fn render_object(dictionary: &Dictionary, obj: &Object) -> Group {
                 }
             }
         }
-        Some(Character::Sprite(def)) => {
+        Character::Sprite(def) => {
             eprintln!("unimplemented sprite: {:?}", def);
         }
-        None => {
-            eprintln!("missing dictionary entry for {:?}", obj.character);
-        }
     }
+
     g
 }
