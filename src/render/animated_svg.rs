@@ -1,5 +1,5 @@
 use crate::dictionary::{Character, CharacterId, Dictionary};
-use crate::scene::{Object, Scene};
+use crate::scene::{Frame, Object, SceneBuilder};
 use crate::shape::{Line, Point, Shape};
 use svg::node::element::{path, Animate, Group, Path, Rectangle};
 use swf_tree as swf;
@@ -20,32 +20,16 @@ fn sfixed16p16_to_f64(x: &swf::fixed_point::Sfixed16P16) -> f64 {
 
 pub fn render(movie: &swf::Movie) -> svg::Document {
     let mut dictionary = Dictionary::default();
-    let mut scene = Scene::default();
+    let mut scene_builder = SceneBuilder::default();
 
-    let view_box = {
-        let r = &movie.header.frame_size;
-        (r.x_min, r.y_min, r.x_max - r.x_min, r.y_max - r.y_min)
-    };
-    let frame_rate = ufixed8p8_to_f64(&movie.header.frame_rate);
-    let frame_duration = 1.0 / frame_rate;
-    let movie_duration = movie.header.frame_count as f64 * frame_duration;
-    let mut frame = 0;
-    let mut svg_document = svg::Document::new().set("viewBox", view_box);
+    let mut bg = [0, 0, 0];
 
-    let mut i = 0;
-    while let Some(tag) = movie.tags.get(i) {
+    for tag in &movie.tags {
         match tag {
             swf::Tag::SetBackgroundColor(set_bg) => {
-                let bg = &set_bg.color;
-                let mut bg = (bg.r, bg.g, bg.b);
+                let c = &set_bg.color;
                 // HACK(eddyb) need black background for some reason.
-                bg = (0, 0, 0);
-                svg_document = svg_document.add(
-                    Rectangle::new()
-                        .set("width", "100%")
-                        .set("height", "100%")
-                        .set("fill", format!("#{:02x}{:02x}{:02x}", bg.0, bg.1, bg.2)),
-                );
+                // bg = [c.r, c.g, c.b];
             }
             swf::Tag::DefineShape(def) => {
                 dictionary.define(CharacterId(def.id), Character::Shape(Shape::from(def)))
@@ -53,54 +37,80 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
             swf::Tag::DefineSprite(def) => {
                 dictionary.define(CharacterId(def.id), Character::Sprite(def))
             }
-            swf::Tag::PlaceObject(place) => scene.place_object(place),
-            swf::Tag::RemoveObject(remove) => scene.remove_object(remove),
-            swf::Tag::ShowFrame => {
-                // Process sequences of ShowFrame tags as one (longer) frame.
-                let consecutive_frames = movie.tags[i..]
-                    .iter()
-                    .take_while(|tag| match tag {
-                        swf::Tag::ShowFrame => true,
-                        _ => false,
-                    })
-                    .count() as u16;
-                let animate_set = |frame: u16, attr, val| {
-                    Animate::new()
-                        .set("attributeName", attr)
-                        .set("to", val)
-                        .set("begin", (frame as f64 * frame_duration) - movie_duration)
-                        .set("dur", movie_duration)
-                        .set("calcMode", "discrete")
-                        .set("repeatCount", "indefinite")
-                };
-                let mut svg_frame = render_frame(&dictionary, &scene);
-                if movie.header.frame_count > consecutive_frames {
-                    svg_frame = svg_frame
-                        .set("opacity", 0)
-                        .add(animate_set(frame, "opacity", 1))
-                        .add(animate_set(frame + consecutive_frames, "opacity", 0));
-                }
-                svg_document = svg_document.add(svg_frame);
-                frame += consecutive_frames;
-                i += consecutive_frames as usize;
-                continue;
-            }
+            swf::Tag::PlaceObject(place) => scene_builder.place_object(place),
+            swf::Tag::RemoveObject(remove) => scene_builder.remove_object(remove),
+            swf::Tag::ShowFrame => scene_builder.advance_frame(),
             _ => eprintln!("unknown tag: {:?}", tag),
         }
-        i += 1;
+    }
+
+    let scene = scene_builder.finish(movie);
+
+    let view_box = {
+        let r = &movie.header.frame_size;
+        (r.x_min, r.y_min, r.x_max - r.x_min, r.y_max - r.y_min)
+    };
+    let mut svg_document = svg::Document::new().set("viewBox", view_box).add(
+        Rectangle::new()
+            .set("width", "100%")
+            .set("height", "100%")
+            .set("fill", format!("#{:02x}{:02x}{:02x}", bg[0], bg[1], bg[2])),
+    );
+
+    let frame_count = Frame(movie.header.frame_count);
+
+    let frame_rate = ufixed8p8_to_f64(&movie.header.frame_rate);
+    let frame_duration = 1.0 / frame_rate;
+    let movie_duration = frame_count.0 as f64 * frame_duration;
+
+    // HACK(eddyb) fake a `<set>` animation which
+    // the `svg` crate doesn't directly support.
+    let animate_set = |frame: Frame, attr, val| {
+        Animate::new()
+            .set("attributeName", attr)
+            .set("to", val)
+            .set("begin", (frame.0 as f64 * frame_duration) - movie_duration)
+            .set("dur", movie_duration)
+            .set("calcMode", "discrete")
+            .set("repeatCount", "indefinite")
+    };
+
+    for layer in scene.layers.values() {
+        let mut frame = Frame(0);
+        while frame < frame_count {
+            // Process multiple identical frames as one (longer) frame.
+            let mut next_frame = frame;
+            loop {
+                next_frame = next_frame + Frame(1);
+                if next_frame >= frame_count {
+                    break;
+                }
+                if layer.any_changes_in_frame(next_frame) {
+                    break;
+                }
+            }
+
+            if let Some(obj) = layer.object_at_frame(frame) {
+                let mut obj = render_object(&dictionary, obj);
+
+                if (frame, next_frame) != (Frame(0), frame_count) {
+                    obj = obj
+                        .set("opacity", 0)
+                        .add(animate_set(frame, "opacity", 1))
+                        .add(animate_set(next_frame, "opacity", 0));
+                }
+                svg_document = svg_document.add(obj);
+            }
+
+            frame = next_frame;
+        }
     }
 
     svg_document
 }
 
-fn render_frame(dictionary: &Dictionary, scene: &Scene) -> Group {
-    let mut g = Group::new();
-    for obj in scene.objects_by_depth() {
-        g = g.add(render_object(dictionary, obj));
-    }
-    g
-}
-
+// TODO(eddyb) render frames as SVG animations of each character
+// at a depth level, which only gets its transform animated.
 fn render_object(dictionary: &Dictionary, obj: &Object) -> Group {
     let transform = {
         // TODO(eddyb) try to do this with fixed-point arithmetic,
