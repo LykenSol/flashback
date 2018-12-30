@@ -32,7 +32,8 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
     let mut frame = 0;
     let mut svg_document = svg::Document::new().set("viewBox", view_box);
 
-    for tag in &movie.tags {
+    let mut i = 0;
+    while let Some(tag) = movie.tags.get(i) {
         match tag {
             swf::Tag::SetBackgroundColor(set_bg) => {
                 let bg = &set_bg.color;
@@ -55,6 +56,14 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
             swf::Tag::PlaceObject(place) => scene.place_object(place),
             swf::Tag::RemoveObject(remove) => scene.remove_object(remove),
             swf::Tag::ShowFrame => {
+                // Process sequences of ShowFrame tags as one (longer) frame.
+                let consecutive_frames = movie.tags[i..]
+                    .iter()
+                    .take_while(|tag| match tag {
+                        swf::Tag::ShowFrame => true,
+                        _ => false,
+                    })
+                    .count() as u16;
                 let animate_set = |frame: u16, attr, val| {
                     Animate::new()
                         .set("attributeName", attr)
@@ -65,17 +74,20 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
                         .set("repeatCount", "indefinite")
                 };
                 let mut svg_frame = render_frame(&dictionary, &scene);
-                if movie.header.frame_count > 1 {
+                if movie.header.frame_count > consecutive_frames {
                     svg_frame = svg_frame
                         .set("opacity", 0)
                         .add(animate_set(frame, "opacity", 1))
-                        .add(animate_set(frame + 1, "opacity", 0));
+                        .add(animate_set(frame + consecutive_frames, "opacity", 0));
                 }
                 svg_document = svg_document.add(svg_frame);
-                frame += 1;
+                frame += consecutive_frames;
+                i += consecutive_frames as usize;
+                continue;
             }
             _ => eprintln!("unknown tag: {:?}", tag),
         }
+        i += 1;
     }
 
     svg_document
