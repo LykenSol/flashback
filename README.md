@@ -9,7 +9,24 @@ avoiding on-the-fly emulation as much as possible.
 
 ## Status
 
-This is an **experimental** project, with no guarantees that it will ever become useful.
+*This is an **experimental** project, with no guarantees that it will ever become useful.*
+
+### Conversion to animated SVGs
+
+Only shapes with basic fill/stroke styles work, other "characters" are ignored.
+Objects' presence and their transformations are converted to SVG `<animate>`
+and `<animateTransform>` applied to groups of paths.
+
+It's possible to support more SWF features (e.g. sprites), but there are
+fundamental limitations, at least for script-less SVG.
+
+`cargo run foo.swf` will output a `foo.svg` file, which hopefully resembles
+the original, at least partially. It can also process multiple files, so you
+can use `cargo run your-flash-stash/*.swf` to get a representative sample.
+
+Feel free to experiment and report issues, but keep in mind that errors
+explicitly mentioning `swf-parser` or `Unknown(Unknown {...})` tags are
+caused by limitations in the [Open Flash] components (see below).
 
 ## Relation to the [Open Flash] project
 
