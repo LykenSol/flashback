@@ -64,12 +64,14 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
                         .set("calcMode", "discrete")
                         .set("repeatCount", "indefinite")
                 };
-                svg_document = svg_document.add(
-                    render_frame(&dictionary, &scene)
+                let mut svg_frame = render_frame(&dictionary, &scene);
+                if movie.header.frame_count > 1 {
+                    svg_frame = svg_frame
                         .set("opacity", 0)
                         .add(animate_set(frame, "opacity", 1))
-                        .add(animate_set(frame + 1, "opacity", 0)),
-                );
+                        .add(animate_set(frame + 1, "opacity", 0));
+                }
+                svg_document = svg_document.add(svg_frame);
                 frame += 1;
             }
             _ => eprintln!("unknown tag: {:?}", tag),
