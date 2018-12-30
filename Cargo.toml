@@ -10,3 +10,14 @@ readme = "README.md"
 description = "Adobe Flash / SWF preservation tools."
 
 [dependencies]
+swf-parser = "0.0.2"
+swf-tree = "0.0.14"
+svg = "0.5.12"
+
+[replace]
+"swf-parser:0.0.2" = { git = 'https://github.com/lykenware/swf-parser', branch = "submodule-less" }
+"swf-tree:0.0.14" = { git = 'https://github.com/lykenware/swf-tree', branch = "flashback-0.0.14" }
+
+[lib]
+doctest = false
+test = false
