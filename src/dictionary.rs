@@ -1,6 +1,7 @@
 use crate::shape::Shape;
 use std::collections::HashMap;
 use std::ops::Index;
+use swf_tree as swf;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CharacterId(pub u16);
@@ -8,6 +9,7 @@ pub struct CharacterId(pub u16);
 #[derive(Clone, Debug)]
 pub enum Character<'a> {
     Shape(Shape<'a>),
+    Sprite(&'a swf::tags::DefineSprite),
 }
 
 #[derive(Clone, Default, Debug)]
@@ -21,6 +23,10 @@ impl<'a> Dictionary<'a> {
             self.characters.insert(id, character).is_none(),
             "Dictionary::define: ID {} is already taken"
         );
+    }
+
+    pub fn get(&self, id: CharacterId) -> Option<&Character<'a>> {
+        self.characters.get(&id)
     }
 }
 

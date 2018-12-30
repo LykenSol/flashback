@@ -49,6 +49,9 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
             swf::Tag::DefineShape(def) => {
                 dictionary.define(CharacterId(def.id), Character::Shape(Shape::from(def)))
             }
+            swf::Tag::DefineSprite(def) => {
+                dictionary.define(CharacterId(def.id), Character::Sprite(def))
+            }
             swf::Tag::PlaceObject(place) => scene.place_object(place),
             swf::Tag::RemoveObject(remove) => scene.remove_object(remove),
             swf::Tag::ShowFrame => {
@@ -106,8 +109,8 @@ fn render_object(dictionary: &Dictionary, obj: &Object) -> Group {
     };
 
     let mut g = Group::new();
-    match &dictionary[obj.character] {
-        Character::Shape(shape) => {
+    match dictionary.get(obj.character) {
+        Some(Character::Shape(shape)) => {
             // TODO(eddyb) confirm/infirm the correctness of this.
             let transform = |p| transform(p - shape.center) + shape.center;
 
@@ -185,6 +188,12 @@ fn render_object(dictionary: &Dictionary, obj: &Object) -> Group {
                     );
                 }
             }
+        }
+        Some(Character::Sprite(def)) => {
+            eprintln!("unimplemented sprite: {:?}", def);
+        }
+        None => {
+            eprintln!("missing dictionary entry for {:?}", obj.character);
         }
     }
     g
