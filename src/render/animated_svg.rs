@@ -81,9 +81,6 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
         let mut rotate = Animation::new(frame_count, movie_duration, 0.0);
         let mut translate = Animation::new(frame_count, movie_duration, (0, 0));
 
-        if !layer.frames.contains_key(&Frame(0)) {
-            opacity.add(Frame(0), 0);
-        }
         for (&frame, obj) in &layer.frames {
             opacity.add(frame, obj.show as u8);
             if !obj.show {

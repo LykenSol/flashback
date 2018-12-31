@@ -71,19 +71,15 @@ impl Clone for Object {
     }
 }
 
-#[derive(Default)]
 pub struct Layer {
     pub frames: BTreeMap<Frame, Object>,
 }
 
-impl Layer {
-    pub fn any_changes_in_frame(&self, frame: Frame) -> bool {
-        self.frames.contains_key(&frame)
-    }
-
-    pub fn object_at_frame(&self, frame: Frame) -> Option<&Object> {
-        // Find the last frame with a change to this object.
-        self.frames.range(..=frame).rev().next().map(|(_, obj)| obj)
+impl Default for Layer {
+    fn default() -> Self {
+        let mut frames = BTreeMap::new();
+        frames.insert(Frame(0), Object::default());
+        Layer { frames }
     }
 }
 
