@@ -1,5 +1,5 @@
 use crate::dictionary::{Character, CharacterId, Dictionary};
-use crate::scene::{Frame, Scene, SceneBuilder};
+use crate::scene::{Frame, Object, Scene, SceneBuilder};
 use crate::shape::{Line, Shape};
 use std::cell::Cell;
 use std::collections::BTreeSet;
@@ -9,6 +9,7 @@ use svg::node::element::{
     path, Animate, AnimateTransform, ClipPath, Definitions, Group, LinearGradient, Path,
     RadialGradient, Rectangle, Stop, Use,
 };
+use svg::Node;
 use swf_tree as swf;
 
 // FIXME(eddyb) upstream these as methods on `swf-fixed` types.
@@ -161,11 +162,11 @@ impl<T: Copy + PartialEq + Into<svg::node::Value>> Animation<T> {
         self.current_value = value;
     }
 
-    fn animate(self, g: Group, attr: &str) -> Group {
+    fn animate<U: Node>(self, mut node: U, attr: &str) -> U {
         match &self.key_times[..] {
-            "" => g,
-            "0" => g.set(attr, self.values),
-            _ => g.add(
+            "" => {}
+            "0" => node.assign(attr, self.values),
+            _ => node.append(
                 Animate::new()
                     .set("attributeName", attr)
                     .set("keyTimes", self.key_times)
@@ -175,6 +176,7 @@ impl<T: Copy + PartialEq + Into<svg::node::Value>> Animation<T> {
                     .set("dur", self.movie_duration),
             ),
         }
+        node
     }
 
     fn animate_transform(self, g: Group, ty: &str) -> Group {
@@ -245,6 +247,71 @@ impl Into<svg::node::Value> for Transform {
     }
 }
 
+#[derive(Copy, Clone, PartialEq)]
+struct CharacterUseHref(Option<CharacterId>);
+
+impl Into<svg::node::Value> for CharacterUseHref {
+    fn into(self) -> svg::node::Value {
+        match self.0 {
+            Some(id) => format!("#c_{}", id.0).into(),
+            None => "#".into(),
+        }
+    }
+}
+
+struct ObjectAnimation {
+    character: Animation<CharacterUseHref>,
+
+    scale: Animation<(f64, f64)>,
+    skew_y: Animation<f64>,
+    rotate: Animation<f64>,
+    translate: Animation<(i32, i32)>,
+}
+
+impl ObjectAnimation {
+    fn new(frame_count: Frame, movie_duration: f64) -> Self {
+        ObjectAnimation {
+            character: Animation::new(frame_count, movie_duration, CharacterUseHref(None)),
+
+            scale: Animation::new(frame_count, movie_duration, (1.0, 1.0)),
+            skew_y: Animation::new(frame_count, movie_duration, 0.0),
+            rotate: Animation::new(frame_count, movie_duration, 0.0),
+            translate: Animation::new(frame_count, movie_duration, (0, 0)),
+        }
+    }
+
+    fn add(&mut self, frame: Frame, obj: Option<&Object>) {
+        let obj = match obj {
+            None => {
+                self.character.add(frame, CharacterUseHref(None));
+                return;
+            }
+            Some(obj) => obj,
+        };
+        self.character
+            .add(frame, CharacterUseHref(Some(obj.character)));
+
+        let transform = Transform::from(&obj.matrix);
+
+        self.scale.add(frame, transform.scale);
+        self.skew_y.add(frame, transform.skew_y);
+        self.rotate.add(frame, transform.rotate);
+        self.translate.add(frame, transform.translate);
+    }
+
+    fn to_svg(self) -> Group {
+        // FIXME(eddyb) try to get rid of the redundant `<g>` here.
+        let mut g = Group::new().add(self.character.animate(Use::new(), "href"));
+
+        g = self.scale.animate_transform(g, "scale");
+        g = self.skew_y.animate_transform(g, "skewY");
+        g = self.rotate.animate_transform(g, "rotate");
+        g = self.translate.animate_transform(g, "translate");
+
+        g
+    }
+}
+
 struct Context<'a> {
     frame_rate: f64,
     dictionary: Dictionary<'a>,
@@ -254,12 +321,14 @@ struct Context<'a> {
 
 impl<'a> Context<'a> {
     fn each_used_character(&self, scene: &Scene, f: &mut impl FnMut(CharacterId)) {
-        for (&(_, character), layer) in &scene.layers {
-            if layer.frames.values().any(|obj| obj.show) {
-                f(character);
-            }
-            if let Some(Character::Sprite(scene)) = self.dictionary.get(character) {
-                self.each_used_character(scene, f);
+        for layer in scene.layers.values() {
+            for obj in layer.frames.values() {
+                if let Some(obj) = obj {
+                    f(obj.character);
+                    if let Some(Character::Sprite(scene)) = self.dictionary.get(obj.character) {
+                        self.each_used_character(scene, f);
+                    }
+                }
             }
         }
     }
@@ -426,38 +495,12 @@ impl<'a> Context<'a> {
         let movie_duration = scene.frame_count.0 as f64 * frame_duration;
 
         let mut svg_scene = Group::new();
-        for (&(_, character), layer) in &scene.layers {
-            let mut opacity = Animation::new(scene.frame_count, movie_duration, 1);
-
-            let mut scale = Animation::new(scene.frame_count, movie_duration, (1.0, 1.0));
-            let mut skew_y = Animation::new(scene.frame_count, movie_duration, 0.0);
-            let mut rotate = Animation::new(scene.frame_count, movie_duration, 0.0);
-            let mut translate = Animation::new(scene.frame_count, movie_duration, (0, 0));
-
+        for layer in scene.layers.values() {
+            let mut animation = ObjectAnimation::new(scene.frame_count, movie_duration);
             for (&frame, obj) in &layer.frames {
-                opacity.add(frame, obj.show as u8);
-                if !obj.show {
-                    continue;
-                }
-
-                let transform = Transform::from(&obj.matrix);
-
-                scale.add(frame, transform.scale);
-                skew_y.add(frame, transform.skew_y);
-                rotate.add(frame, transform.rotate);
-                translate.add(frame, transform.translate);
+                animation.add(frame, obj.as_ref());
             }
-
-            // FIXME(eddyb) try to get rid of the redundant `<g>` here.
-            let mut g = Group::new().add(Use::new().set("href", format!("#c_{}", character.0)));
-            g = opacity.animate(g, "opacity");
-
-            g = scale.animate_transform(g, "scale");
-            g = skew_y.animate_transform(g, "skewY");
-            g = rotate.animate_transform(g, "rotate");
-            g = translate.animate_transform(g, "translate");
-
-            svg_scene = svg_scene.add(g);
+            svg_scene = svg_scene.add(animation.to_svg());
         }
         svg_scene
     }
