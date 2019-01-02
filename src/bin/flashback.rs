@@ -11,7 +11,7 @@ fn main() {
             Ok(movie) => {
                 eprintln!("{}:", path.display());
                 // println!("{:#?}", movie);
-                let document = flashback::export::animated_svg::export(&movie);
+                let document = flashback::export::svg::export(&movie);
                 svg::save(path.with_extension("svg"), &document).unwrap();
             }
             Err(e) => {

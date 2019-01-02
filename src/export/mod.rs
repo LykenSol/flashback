@@ -1,1 +1,1 @@
-pub mod animated_svg;
+pub mod svg;
