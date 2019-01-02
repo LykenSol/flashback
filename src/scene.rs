@@ -86,6 +86,7 @@ impl Default for Layer {
 #[derive(Default)]
 pub struct Scene {
     pub layers: BTreeMap<(Depth, CharacterId), Layer>,
+    pub frame_count: Frame,
 }
 
 #[derive(Default)]
@@ -167,8 +168,9 @@ impl SceneBuilder {
         self.current_frame = self.current_frame + Frame(1);
     }
 
-    pub fn finish(self, movie: &swf::Movie) -> Scene {
-        assert_eq!(self.current_frame, Frame(movie.header.frame_count));
+    pub fn finish(mut self, movie: &swf::Movie) -> Scene {
+        self.scene.frame_count = Frame(movie.header.frame_count);
+        assert_eq!(self.current_frame, self.scene.frame_count);
 
         self.scene
     }

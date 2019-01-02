@@ -96,19 +96,17 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
 
     svg_document = svg_document.add(svg_defs);
 
-    let frame_count = Frame(movie.header.frame_count);
-
     let frame_rate = ufixed8p8_to_f64(&movie.header.frame_rate);
     let frame_duration = 1.0 / frame_rate;
-    let movie_duration = frame_count.0 as f64 * frame_duration;
+    let movie_duration = scene.frame_count.0 as f64 * frame_duration;
 
     for (&(_, character), layer) in &scene.layers {
-        let mut opacity = Animation::new(frame_count, movie_duration, 1);
+        let mut opacity = Animation::new(scene.frame_count, movie_duration, 1);
 
-        let mut scale = Animation::new(frame_count, movie_duration, (1.0, 1.0));
-        let mut skew_y = Animation::new(frame_count, movie_duration, 0.0);
-        let mut rotate = Animation::new(frame_count, movie_duration, 0.0);
-        let mut translate = Animation::new(frame_count, movie_duration, (0, 0));
+        let mut scale = Animation::new(scene.frame_count, movie_duration, (1.0, 1.0));
+        let mut skew_y = Animation::new(scene.frame_count, movie_duration, 0.0);
+        let mut rotate = Animation::new(scene.frame_count, movie_duration, 0.0);
+        let mut translate = Animation::new(scene.frame_count, movie_duration, (0, 0));
 
         for (&frame, obj) in &layer.frames {
             opacity.add(frame, obj.show as u8);
