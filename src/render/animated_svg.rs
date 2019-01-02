@@ -66,8 +66,44 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
         let r = &movie.header.frame_size;
         (r.x_min, r.y_min, r.x_max - r.x_min, r.y_max - r.y_min)
     };
+
+    let mut cx = Context {
+        frame_rate: ufixed8p8_to_f64(&movie.header.frame_rate),
+        dictionary,
+        svg_defs: Definitions::new().add(
+            ClipPath::new().set("id", "viewBox_clip").add(
+                Rectangle::new()
+                    .set("x", view_box.0)
+                    .set("y", view_box.1)
+                    .set("width", view_box.2)
+                    .set("height", view_box.3),
+            ),
+        ),
+    };
+
+    let mut used_characters = BTreeSet::new();
+    cx.each_used_character(&scene, &mut |c| {
+        used_characters.insert(c);
+    });
+
+    for character in used_characters {
+        let id = format!("c_{}", character.0);
+        let character = match cx.dictionary.get(character) {
+            Some(character) => cx.render_character(character),
+            None => {
+                eprintln!("missing dictionary entry for {:?}", character);
+                continue;
+            }
+        };
+        cx.svg_defs = cx.svg_defs.add(character.set("id", id));
+    }
+
+    let svg_body = cx
+        .render_scene(&scene)
+        .set("clip-path", "url(#viewBox_clip)");
+
     let bg = format!("#{:02x}{:02x}{:02x}", bg[0], bg[1], bg[2]);
-    let mut svg_document = svg::Document::new()
+    svg::Document::new()
         .set("viewBox", view_box)
         .set("style", format!("background: {}", bg))
         .add(
@@ -75,91 +111,9 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
                 .set("width", "100%")
                 .set("height", "100%")
                 .set("fill", bg),
-        );
-    let mut svg_defs = Definitions::new().add(
-        ClipPath::new().set("id", "viewBox_clip").add(
-            Rectangle::new()
-                .set("x", view_box.0)
-                .set("y", view_box.1)
-                .set("width", view_box.2)
-                .set("height", view_box.3),
-        ),
-    );
-
-    let mut used_characters = BTreeSet::new();
-    each_used_character(&dictionary, &scene, &mut |c| {
-        used_characters.insert(c);
-    });
-
-    let frame_rate = ufixed8p8_to_f64(&movie.header.frame_rate);
-
-    for character in used_characters {
-        let id = format!("c_{}", character.0);
-        let character = match dictionary.get(character) {
-            Some(character) => character,
-            None => {
-                eprintln!("missing dictionary entry for {:?}", character);
-                continue;
-            }
-        };
-        svg_defs = svg_defs.add(render_character(character, frame_rate).set("id", id));
-    }
-
-    svg_document
-        .add(svg_defs)
-        .add(render_scene(&scene, frame_rate).set("clip-path", "url(#viewBox_clip)"))
-}
-
-fn each_used_character(dictionary: &Dictionary, scene: &Scene, f: &mut impl FnMut(CharacterId)) {
-    for (&(_, character), layer) in &scene.layers {
-        if layer.frames.values().any(|obj| obj.show) {
-            f(character);
-        }
-        if let Some(Character::Sprite(scene)) = dictionary.get(character) {
-            each_used_character(dictionary, scene, f);
-        }
-    }
-}
-
-fn render_scene(scene: &Scene, frame_rate: f64) -> Group {
-    let frame_duration = 1.0 / frame_rate;
-    let movie_duration = scene.frame_count.0 as f64 * frame_duration;
-
-    let mut svg_scene = Group::new();
-    for (&(_, character), layer) in &scene.layers {
-        let mut opacity = Animation::new(scene.frame_count, movie_duration, 1);
-
-        let mut scale = Animation::new(scene.frame_count, movie_duration, (1.0, 1.0));
-        let mut skew_y = Animation::new(scene.frame_count, movie_duration, 0.0);
-        let mut rotate = Animation::new(scene.frame_count, movie_duration, 0.0);
-        let mut translate = Animation::new(scene.frame_count, movie_duration, (0, 0));
-
-        for (&frame, obj) in &layer.frames {
-            opacity.add(frame, obj.show as u8);
-            if !obj.show {
-                continue;
-            }
-
-            let transform = Transform::from(&obj.matrix);
-
-            scale.add(frame, transform.scale);
-            skew_y.add(frame, transform.skew_y);
-            rotate.add(frame, transform.rotate);
-            translate.add(frame, transform.translate);
-        }
-
-        // FIXME(eddyb) try to get rid of the redundant `<g>` here.
-        let mut g = Group::new().add(Use::new().set("href", format!("#c_{}", character.0)));
-        g = opacity.animate(g, "opacity");
-
-        g = scale.animate_transform(g, "scale");
-        g = skew_y.animate_transform(g, "skewY");
-        g = rotate.animate_transform(g, "rotate");
-        g = translate.animate_transform(g, "translate");
-
-        svg_scene = svg_scene.add(g);
-    }
-    svg_scene
+        )
+        .add(cx.svg_defs)
+        .add(svg_body)
 }
 
 struct Animation<T> {
@@ -287,111 +241,171 @@ impl Into<svg::node::Value> for Transform {
     }
 }
 
-fn rgba_to_svg(c: &swf::StraightSRgba8) -> String {
-    if c.a == 0xff {
-        format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
-    } else {
-        format!("rgba({}, {}, {}, {})", c.r, c.g, c.b, c.a)
-    }
+struct Context<'a> {
+    frame_rate: f64,
+    dictionary: Dictionary<'a>,
+    svg_defs: Definitions,
 }
 
-fn render_character(character: &Character, frame_rate: f64) -> Group {
-    match character {
-        Character::Shape(shape) => {
-            let mut g = Group::new();
-
-            // TODO(eddyb) do the transforms need to take `shape.center` into account?
-
-            let fill_color = |style: &swf::FillStyle| {
-                match style {
-                    swf::FillStyle::Solid(solid) => rgba_to_svg(&solid.color),
-                    _ => {
-                        eprintln!("unsupported fill: {:?}", style);
-                        // TODO(eddyb) implement gradient & bitmap support.
-                        "#ff00ff".to_string()
-                    }
-                }
-            };
-
-            let path_data = |path: &[Line]| {
-                let start = path.first()?.from;
-
-                let mut data = path::Data::new().move_to(start.x_y());
-                let mut pos = start;
-
-                for line in path {
-                    if line.from != pos {
-                        data = data.move_to(line.from.x_y());
-                    }
-
-                    if let Some(control) = line.bezier_control {
-                        data =
-                            data.quadratic_curve_to((control.x, control.y, line.to.x, line.to.y));
-                    } else {
-                        data = data.line_to(line.to.x_y());
-                    }
-
-                    pos = line.to;
-                }
-
-                Some((start, data, pos))
-            };
-
-            for fill in &shape.fill {
-                if let Some((start, mut data, end)) = path_data(&fill.path) {
-                    if start == end {
-                        data = data.close();
-                    }
-
-                    g = g.add(
-                        Path::new()
-                            .set("fill", fill_color(fill.style))
-                            // TODO(eddyb) confirm/infirm the correctness of this.
-                            .set("fill-rule", "evenodd")
-                            .set("d", data),
-                    );
-                }
+impl<'a> Context<'a> {
+    fn each_used_character(&self, scene: &Scene, f: &mut impl FnMut(CharacterId)) {
+        for (&(_, character), layer) in &scene.layers {
+            if layer.frames.values().any(|obj| obj.show) {
+                f(character);
             }
-
-            for stroke in &shape.stroke {
-                if let Some((start, mut data, end)) = path_data(&stroke.path) {
-                    if !stroke.style.no_close && start == end {
-                        data = data.close();
-                    }
-
-                    // TODO(eddyb) implement cap/join support.
-
-                    g = g.add(
-                        Path::new()
-                            .set("fill", "none")
-                            .set("stroke", fill_color(&stroke.style.fill))
-                            .set("stroke-width", stroke.style.width)
-                            .set("d", data),
-                    );
-                }
+            if let Some(Character::Sprite(scene)) = self.dictionary.get(character) {
+                self.each_used_character(scene, f);
             }
-
-            g
         }
+    }
 
-        // TODO(eddyb) figure out if there's anything to be done here
-        // wrt synchronizing the animiation timelines of sprites.
-        Character::Sprite(scene) => render_scene(scene, frame_rate),
-
-        Character::DynamicText(def) => {
-            let mut text = svg::node::element::Text::new().add(svg::node::Text::new(
-                def.text.as_ref().map_or("", |s| &s[..]),
-            ));
-
-            if let Some(size) = def.font_size {
-                text = text.set("font-size", size);
-            }
-
-            if let Some(color) = &def.color {
-                text = text.set("fill", rgba_to_svg(color));
-            }
-
-            Group::new().add(text)
+    fn rgba_to_svg(&self, c: &swf::StraightSRgba8) -> String {
+        if c.a == 0xff {
+            format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
+        } else {
+            format!("rgba({}, {}, {}, {})", c.r, c.g, c.b, c.a)
         }
+    }
+
+    fn fill_to_svg(&self, style: &swf::FillStyle) -> String {
+        match style {
+            swf::FillStyle::Solid(solid) => self.rgba_to_svg(&solid.color),
+            _ => {
+                eprintln!("unsupported fill: {:?}", style);
+                // TODO(eddyb) implement gradient & bitmap support.
+                "#ff00ff".to_string()
+            }
+        }
+    }
+
+    fn render_character(&self, character: &Character) -> Group {
+        match character {
+            Character::Shape(shape) => {
+                let mut g = Group::new();
+
+                // TODO(eddyb) do the transforms need to take `shape.center` into account?
+
+                let path_data = |path: &[Line]| {
+                    let start = path.first()?.from;
+
+                    let mut data = path::Data::new().move_to(start.x_y());
+                    let mut pos = start;
+
+                    for line in path {
+                        if line.from != pos {
+                            data = data.move_to(line.from.x_y());
+                        }
+
+                        if let Some(control) = line.bezier_control {
+                            data = data
+                                .quadratic_curve_to((control.x, control.y, line.to.x, line.to.y));
+                        } else {
+                            data = data.line_to(line.to.x_y());
+                        }
+
+                        pos = line.to;
+                    }
+
+                    Some((start, data, pos))
+                };
+
+                for fill in &shape.fill {
+                    if let Some((start, mut data, end)) = path_data(&fill.path) {
+                        if start == end {
+                            data = data.close();
+                        }
+
+                        g = g.add(
+                            Path::new()
+                                .set("fill", self.fill_to_svg(fill.style))
+                                // TODO(eddyb) confirm/infirm the correctness of this.
+                                .set("fill-rule", "evenodd")
+                                .set("d", data),
+                        );
+                    }
+                }
+
+                for stroke in &shape.stroke {
+                    if let Some((start, mut data, end)) = path_data(&stroke.path) {
+                        if !stroke.style.no_close && start == end {
+                            data = data.close();
+                        }
+
+                        // TODO(eddyb) implement cap/join support.
+
+                        g = g.add(
+                            Path::new()
+                                .set("fill", "none")
+                                .set("stroke", self.fill_to_svg(&stroke.style.fill))
+                                .set("stroke-width", stroke.style.width)
+                                .set("d", data),
+                        );
+                    }
+                }
+
+                g
+            }
+
+            // TODO(eddyb) figure out if there's anything to be done here
+            // wrt synchronizing the animiation timelines of sprites.
+            Character::Sprite(scene) => self.render_scene(scene),
+
+            Character::DynamicText(def) => {
+                let mut text = svg::node::element::Text::new().add(svg::node::Text::new(
+                    def.text.as_ref().map_or("", |s| &s[..]),
+                ));
+
+                if let Some(size) = def.font_size {
+                    text = text.set("font-size", size);
+                }
+
+                if let Some(color) = &def.color {
+                    text = text.set("fill", self.rgba_to_svg(color));
+                }
+
+                Group::new().add(text)
+            }
+        }
+    }
+
+    fn render_scene(&self, scene: &Scene) -> Group {
+        let frame_duration = 1.0 / self.frame_rate;
+        let movie_duration = scene.frame_count.0 as f64 * frame_duration;
+
+        let mut svg_scene = Group::new();
+        for (&(_, character), layer) in &scene.layers {
+            let mut opacity = Animation::new(scene.frame_count, movie_duration, 1);
+
+            let mut scale = Animation::new(scene.frame_count, movie_duration, (1.0, 1.0));
+            let mut skew_y = Animation::new(scene.frame_count, movie_duration, 0.0);
+            let mut rotate = Animation::new(scene.frame_count, movie_duration, 0.0);
+            let mut translate = Animation::new(scene.frame_count, movie_duration, (0, 0));
+
+            for (&frame, obj) in &layer.frames {
+                opacity.add(frame, obj.show as u8);
+                if !obj.show {
+                    continue;
+                }
+
+                let transform = Transform::from(&obj.matrix);
+
+                scale.add(frame, transform.scale);
+                skew_y.add(frame, transform.skew_y);
+                rotate.add(frame, transform.rotate);
+                translate.add(frame, transform.translate);
+            }
+
+            // FIXME(eddyb) try to get rid of the redundant `<g>` here.
+            let mut g = Group::new().add(Use::new().set("href", format!("#c_{}", character.0)));
+            g = opacity.animate(g, "opacity");
+
+            g = scale.animate_transform(g, "scale");
+            g = skew_y.animate_transform(g, "skewY");
+            g = rotate.animate_transform(g, "rotate");
+            g = translate.animate_transform(g, "translate");
+
+            svg_scene = svg_scene.add(g);
+        }
+        svg_scene
     }
 }
