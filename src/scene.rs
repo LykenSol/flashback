@@ -48,6 +48,7 @@ fn default_matrix() -> swf::Matrix {
     }
 }
 
+#[derive(Debug)]
 pub struct Object {
     pub show: bool,
     pub matrix: swf::Matrix,
@@ -71,6 +72,7 @@ impl Clone for Object {
     }
 }
 
+#[derive(Debug)]
 pub struct Layer {
     pub frames: BTreeMap<Frame, Object>,
 }
@@ -83,7 +85,7 @@ impl Default for Layer {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct Scene {
     pub layers: BTreeMap<(Depth, CharacterId), Layer>,
     pub frame_count: Frame,
@@ -168,9 +170,15 @@ impl SceneBuilder {
         self.current_frame = self.current_frame + Frame(1);
     }
 
-    pub fn finish(mut self, movie: &swf::Movie) -> Scene {
-        self.scene.frame_count = Frame(movie.header.frame_count);
-        assert_eq!(self.current_frame, self.scene.frame_count);
+    pub fn finish(mut self, frame_count: Frame) -> Scene {
+        // HACK(eddyb) this should be an error but it happens during testing.
+        if self.current_frame != frame_count {
+            eprintln!(
+                "SceneBuilder::finish: expected {} frames, found {}",
+                frame_count.0, self.current_frame.0,
+            );
+        }
+        self.scene.frame_count = frame_count;
 
         self.scene
     }

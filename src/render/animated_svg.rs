@@ -1,5 +1,5 @@
 use crate::dictionary::{Character, CharacterId, Dictionary};
-use crate::scene::{Frame, SceneBuilder};
+use crate::scene::{Frame, Scene, SceneBuilder};
 use crate::shape::{Line, Shape};
 use std::collections::BTreeSet;
 use std::f64::consts::PI;
@@ -25,10 +25,9 @@ fn sfixed16p16_to_f64(x: &swf::fixed_point::Sfixed16P16) -> f64 {
 
 pub fn render(movie: &swf::Movie) -> svg::Document {
     let mut dictionary = Dictionary::default();
-    let mut scene_builder = SceneBuilder::default();
 
     let mut bg = [0, 0, 0];
-
+    let mut scene_builder = SceneBuilder::default();
     for tag in &movie.tags {
         match tag {
             swf::Tag::SetBackgroundColor(set_bg) => {
@@ -40,7 +39,17 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
                 dictionary.define(CharacterId(def.id), Character::Shape(Shape::from(def)))
             }
             swf::Tag::DefineSprite(def) => {
-                dictionary.define(CharacterId(def.id), Character::Sprite(def))
+                let mut scene_builder = SceneBuilder::default();
+                for tag in &def.tags {
+                    match tag {
+                        swf::Tag::PlaceObject(place) => scene_builder.place_object(place),
+                        swf::Tag::RemoveObject(remove) => scene_builder.remove_object(remove),
+                        swf::Tag::ShowFrame => scene_builder.advance_frame(),
+                        _ => eprintln!("unknown sprite tag: {:?}", tag),
+                    }
+                }
+                let scene = scene_builder.finish(Frame(def.frame_count as u16));
+                dictionary.define(CharacterId(def.id), Character::Sprite(scene))
             }
             swf::Tag::PlaceObject(place) => scene_builder.place_object(place),
             swf::Tag::RemoveObject(remove) => scene_builder.remove_object(remove),
@@ -48,8 +57,7 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
             _ => eprintln!("unknown tag: {:?}", tag),
         }
     }
-
-    let scene = scene_builder.finish(movie);
+    let scene = scene_builder.finish(Frame(movie.header.frame_count));
 
     let view_box = {
         let r = &movie.header.frame_size;
@@ -74,14 +82,14 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
                 .set("height", view_box.3),
         ),
     );
-    let mut svg_body = Group::new().set("clip-path", "url(#viewBox_clip)");
 
     let mut used_characters = BTreeSet::new();
-    for (&(_, character), layer) in &scene.layers {
-        if layer.frames.values().any(|obj| obj.show) {
-            used_characters.insert(character);
-        }
-    }
+    each_used_character(&dictionary, &scene, &mut |c| {
+        used_characters.insert(c);
+    });
+
+    let frame_rate = ufixed8p8_to_f64(&movie.header.frame_rate);
+
     for character in used_characters {
         let id = format!("c_{}", character.0);
         let character = match dictionary.get(character) {
@@ -91,15 +99,30 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
                 continue;
             }
         };
-        svg_defs = svg_defs.add(render_character(character).set("id", id));
+        svg_defs = svg_defs.add(render_character(character, frame_rate).set("id", id));
     }
 
-    svg_document = svg_document.add(svg_defs);
+    svg_document
+        .add(svg_defs)
+        .add(render_scene(&scene, frame_rate).set("clip-path", "url(#viewBox_clip)"))
+}
 
-    let frame_rate = ufixed8p8_to_f64(&movie.header.frame_rate);
+fn each_used_character(dictionary: &Dictionary, scene: &Scene, f: &mut impl FnMut(CharacterId)) {
+    for (&(_, character), layer) in &scene.layers {
+        if layer.frames.values().any(|obj| obj.show) {
+            f(character);
+        }
+        if let Some(Character::Sprite(scene)) = dictionary.get(character) {
+            each_used_character(dictionary, scene, f);
+        }
+    }
+}
+
+fn render_scene(scene: &Scene, frame_rate: f64) -> Group {
     let frame_duration = 1.0 / frame_rate;
     let movie_duration = scene.frame_count.0 as f64 * frame_duration;
 
+    let mut svg_scene = Group::new();
     for (&(_, character), layer) in &scene.layers {
         let mut opacity = Animation::new(scene.frame_count, movie_duration, 1);
 
@@ -131,12 +154,9 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
         g = rotate.animate_transform(g, "rotate");
         g = translate.animate_transform(g, "translate");
 
-        svg_body = svg_body.add(g);
+        svg_scene = svg_scene.add(g);
     }
-
-    svg_document = svg_document.add(svg_body);
-
-    svg_document
+    svg_scene
 }
 
 struct Animation<T> {
@@ -264,11 +284,11 @@ impl Into<svg::node::Value> for Transform {
     }
 }
 
-fn render_character(character: &Character) -> Group {
-    let mut g = Group::new();
-
+fn render_character(character: &Character, frame_rate: f64) -> Group {
     match character {
         Character::Shape(shape) => {
+            let mut g = Group::new();
+
             // TODO(eddyb) do the transforms need to take `shape.center` into account?
 
             let fill_color = |style: &swf::FillStyle| {
@@ -345,11 +365,12 @@ fn render_character(character: &Character) -> Group {
                     );
                 }
             }
-        }
-        Character::Sprite(def) => {
-            eprintln!("unimplemented sprite: {:?}", def);
-        }
-    }
 
-    g
+            g
+        }
+
+        // TODO(eddyb) figure out if there's anything to be done here
+        // wrt synchronizing the animiation timelines of sprites.
+        Character::Sprite(scene) => render_scene(scene, frame_rate),
+    }
 }

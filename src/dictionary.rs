@@ -1,18 +1,18 @@
+use crate::scene::Scene;
 use crate::shape::Shape;
 use std::collections::HashMap;
 use std::ops::Index;
-use swf_tree as swf;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CharacterId(pub u16);
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum Character<'a> {
     Shape(Shape<'a>),
-    Sprite(&'a swf::tags::DefineSprite),
+    Sprite(Scene),
 }
 
-#[derive(Clone, Default, Debug)]
+#[derive(Default, Debug)]
 pub struct Dictionary<'a> {
     characters: HashMap<CharacterId, Character<'a>>,
 }
