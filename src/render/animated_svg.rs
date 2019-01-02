@@ -1,9 +1,12 @@
 use crate::dictionary::{Character, CharacterId, Dictionary};
 use crate::scene::{Frame, SceneBuilder};
 use crate::shape::{Line, Shape};
+use std::collections::BTreeSet;
 use std::f64::consts::PI;
 use std::fmt::Write;
-use svg::node::element::{path, Animate, AnimateTransform, Group, Path, Rectangle};
+use svg::node::element::{
+    path, Animate, AnimateTransform, Definitions, Group, Path, Rectangle, Use,
+};
 use swf_tree as swf;
 
 // FIXME(eddyb) upstream these as methods on `swf-fixed` types.
@@ -59,13 +62,16 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
             .set("fill", format!("#{:02x}{:02x}{:02x}", bg[0], bg[1], bg[2])),
     );
 
-    let frame_count = Frame(movie.header.frame_count);
-
-    let frame_rate = ufixed8p8_to_f64(&movie.header.frame_rate);
-    let frame_duration = 1.0 / frame_rate;
-    let movie_duration = frame_count.0 as f64 * frame_duration;
-
+    let mut used_characters = BTreeSet::new();
     for (&(_, character), layer) in &scene.layers {
+        if layer.frames.values().any(|obj| obj.show) {
+            used_characters.insert(character);
+        }
+    }
+
+    let mut svg_defs = Definitions::new();
+    for character in used_characters {
+        let id = format!("c_{}", character.0);
         let character = match dictionary.get(character) {
             Some(character) => character,
             None => {
@@ -73,7 +79,18 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
                 continue;
             }
         };
+        svg_defs = svg_defs.add(render_character(character).set("id", id));
+    }
 
+    svg_document = svg_document.add(svg_defs);
+
+    let frame_count = Frame(movie.header.frame_count);
+
+    let frame_rate = ufixed8p8_to_f64(&movie.header.frame_rate);
+    let frame_duration = 1.0 / frame_rate;
+    let movie_duration = frame_count.0 as f64 * frame_duration;
+
+    for (&(_, character), layer) in &scene.layers {
         let mut opacity = Animation::new(frame_count, movie_duration, 1);
 
         let mut scale = Animation::new(frame_count, movie_duration, (1.0, 1.0));
@@ -95,7 +112,8 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
             translate.add(frame, transform.translate);
         }
 
-        let mut g = render_character(character);
+        // FIXME(eddyb) try to get rid of the redundant `<g>` here.
+        let mut g = Group::new().add(Use::new().set("href", format!("#c_{}", character.0)));
         g = opacity.animate(g, "opacity");
 
         g = scale.animate_transform(g, "scale");
