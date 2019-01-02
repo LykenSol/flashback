@@ -5,7 +5,7 @@ use std::collections::BTreeSet;
 use std::f64::consts::PI;
 use std::fmt::Write;
 use svg::node::element::{
-    path, Animate, AnimateTransform, Definitions, Group, Path, Rectangle, Use,
+    path, Animate, AnimateTransform, ClipPath, Definitions, Group, Path, Rectangle, Use,
 };
 use swf_tree as swf;
 
@@ -61,6 +61,16 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
             .set("height", "100%")
             .set("fill", format!("#{:02x}{:02x}{:02x}", bg[0], bg[1], bg[2])),
     );
+    let mut svg_defs = Definitions::new().add(
+        ClipPath::new().set("id", "viewBox_clip").add(
+            Rectangle::new()
+                .set("x", view_box.0)
+                .set("y", view_box.1)
+                .set("width", view_box.2)
+                .set("height", view_box.3),
+        ),
+    );
+    let mut svg_body = Group::new().set("clip-path", "url(#viewBox_clip)");
 
     let mut used_characters = BTreeSet::new();
     for (&(_, character), layer) in &scene.layers {
@@ -68,8 +78,6 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
             used_characters.insert(character);
         }
     }
-
-    let mut svg_defs = Definitions::new();
     for character in used_characters {
         let id = format!("c_{}", character.0);
         let character = match dictionary.get(character) {
@@ -121,8 +129,10 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
         g = rotate.animate_transform(g, "rotate");
         g = translate.animate_transform(g, "translate");
 
-        svg_document = svg_document.add(g);
+        svg_body = svg_body.add(g);
     }
+
+    svg_document = svg_document.add(svg_body);
 
     svg_document
 }
