@@ -1,6 +1,6 @@
 use crate::dictionary::{Character, CharacterId, Dictionary};
-use crate::scene::{Frame, Object, Scene, SceneBuilder};
 use crate::shape::{Line, Shape};
+use crate::timeline::{Frame, Object, Timeline, TimelineBuilder};
 use std::cell::Cell;
 use std::collections::BTreeSet;
 use std::f64::consts::PI;
@@ -30,7 +30,7 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
     let mut dictionary = Dictionary::default();
 
     let mut bg = [0, 0, 0];
-    let mut scene_builder = SceneBuilder::default();
+    let mut timeline_builder = TimelineBuilder::default();
     for tag in &movie.tags {
         match tag {
             swf::Tag::SetBackgroundColor(set_bg) => {
@@ -42,28 +42,28 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
                 dictionary.define(CharacterId(def.id), Character::Shape(Shape::from(def)))
             }
             swf::Tag::DefineSprite(def) => {
-                let mut scene_builder = SceneBuilder::default();
+                let mut timeline_builder = TimelineBuilder::default();
                 for tag in &def.tags {
                     match tag {
-                        swf::Tag::PlaceObject(place) => scene_builder.place_object(place),
-                        swf::Tag::RemoveObject(remove) => scene_builder.remove_object(remove),
-                        swf::Tag::ShowFrame => scene_builder.advance_frame(),
+                        swf::Tag::PlaceObject(place) => timeline_builder.place_object(place),
+                        swf::Tag::RemoveObject(remove) => timeline_builder.remove_object(remove),
+                        swf::Tag::ShowFrame => timeline_builder.advance_frame(),
                         _ => eprintln!("unknown sprite tag: {:?}", tag),
                     }
                 }
-                let scene = scene_builder.finish(Frame(def.frame_count as u16));
-                dictionary.define(CharacterId(def.id), Character::Sprite(scene))
+                let timeline = timeline_builder.finish(Frame(def.frame_count as u16));
+                dictionary.define(CharacterId(def.id), Character::Sprite(timeline))
             }
             swf::Tag::DefineDynamicText(def) => {
                 dictionary.define(CharacterId(def.id), Character::DynamicText(def))
             }
-            swf::Tag::PlaceObject(place) => scene_builder.place_object(place),
-            swf::Tag::RemoveObject(remove) => scene_builder.remove_object(remove),
-            swf::Tag::ShowFrame => scene_builder.advance_frame(),
+            swf::Tag::PlaceObject(place) => timeline_builder.place_object(place),
+            swf::Tag::RemoveObject(remove) => timeline_builder.remove_object(remove),
+            swf::Tag::ShowFrame => timeline_builder.advance_frame(),
             _ => eprintln!("unknown tag: {:?}", tag),
         }
     }
-    let scene = scene_builder.finish(Frame(movie.header.frame_count));
+    let timeline = timeline_builder.finish(Frame(movie.header.frame_count));
 
     let view_box = {
         let r = &movie.header.frame_size;
@@ -88,7 +88,7 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
     };
 
     let mut used_characters = BTreeSet::new();
-    cx.each_used_character(&scene, &mut |c| {
+    cx.each_used_character(&timeline, &mut |c| {
         used_characters.insert(c);
     });
 
@@ -104,7 +104,7 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
     }
 
     let svg_body = cx
-        .render_scene(&scene)
+        .render_timeline(&timeline)
         .set("clip-path", "url(#viewBox_clip)");
 
     let bg = format!("#{:02x}{:02x}{:02x}", bg[0], bg[1], bg[2]);
@@ -320,13 +320,13 @@ struct Context<'a> {
 }
 
 impl<'a> Context<'a> {
-    fn each_used_character(&self, scene: &Scene, f: &mut impl FnMut(CharacterId)) {
-        for layer in scene.layers.values() {
+    fn each_used_character(&self, timeline: &Timeline, f: &mut impl FnMut(CharacterId)) {
+        for layer in timeline.layers.values() {
             for obj in layer.frames.values() {
                 if let Some(obj) = obj {
                     f(obj.character);
-                    if let Some(Character::Sprite(scene)) = self.dictionary.get(obj.character) {
-                        self.each_used_character(scene, f);
+                    if let Some(Character::Sprite(timeline)) = self.dictionary.get(obj.character) {
+                        self.each_used_character(timeline, f);
                     }
                 }
             }
@@ -470,7 +470,7 @@ impl<'a> Context<'a> {
 
             // TODO(eddyb) figure out if there's anything to be done here
             // wrt synchronizing the animiation timelines of sprites.
-            Character::Sprite(scene) => self.render_scene(scene),
+            Character::Sprite(timeline) => self.render_timeline(timeline),
 
             Character::DynamicText(def) => {
                 let mut text = svg::node::element::Text::new().add(svg::node::Text::new(
@@ -490,18 +490,18 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn render_scene(&self, scene: &Scene) -> Group {
+    fn render_timeline(&self, timeline: &Timeline) -> Group {
         let frame_duration = 1.0 / self.frame_rate;
-        let movie_duration = scene.frame_count.0 as f64 * frame_duration;
+        let movie_duration = timeline.frame_count.0 as f64 * frame_duration;
 
-        let mut svg_scene = Group::new();
-        for layer in scene.layers.values() {
-            let mut animation = ObjectAnimation::new(scene.frame_count, movie_duration);
+        let mut g = Group::new();
+        for layer in timeline.layers.values() {
+            let mut animation = ObjectAnimation::new(timeline.frame_count, movie_duration);
             for (&frame, obj) in &layer.frames {
                 animation.add(frame, obj.as_ref());
             }
-            svg_scene = svg_scene.add(animation.to_svg());
+            g = g.add(animation.to_svg());
         }
-        svg_scene
+        g
     }
 }

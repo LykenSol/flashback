@@ -1,5 +1,5 @@
-use crate::scene::Scene;
 use crate::shape::Shape;
+use crate::timeline::Timeline;
 use std::collections::HashMap;
 use std::ops::Index;
 use swf_tree as swf;
@@ -10,7 +10,7 @@ pub struct CharacterId(pub u16);
 #[derive(Debug)]
 pub enum Character<'a> {
     Shape(Shape<'a>),
-    Sprite(Scene),
+    Sprite(Timeline),
     DynamicText(&'a swf::tags::DefineDynamicText),
 }
 

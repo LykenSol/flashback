@@ -78,20 +78,20 @@ pub struct Layer {
 }
 
 #[derive(Default, Debug)]
-pub struct Scene {
+pub struct Timeline {
     pub layers: BTreeMap<Depth, Layer>,
     pub frame_count: Frame,
 }
 
 #[derive(Default)]
-pub struct SceneBuilder {
-    scene: Scene,
+pub struct TimelineBuilder {
+    timeline: Timeline,
     current_frame: Frame,
 }
 
-impl SceneBuilder {
+impl TimelineBuilder {
     pub fn place_object(&mut self, place: &swf::tags::PlaceObject) {
-        let layer = self.scene.layers.entry(Depth(place.depth)).or_default();
+        let layer = self.timeline.layers.entry(Depth(place.depth)).or_default();
 
         // Find the last changed frame for this object, if it's not
         // the current one, and copy its state of the object.
@@ -109,7 +109,7 @@ impl SceneBuilder {
                     place
                         .character_id
                         .map(CharacterId)
-                        .expect("SceneBuilder::place_object: missing `character_id`"),
+                        .expect("TimelineBuilder::place_object: missing `character_id`"),
                 )
             });
 
@@ -126,7 +126,7 @@ impl SceneBuilder {
     }
 
     pub fn remove_object(&mut self, remove: &swf::tags::RemoveObject) {
-        self.scene
+        self.timeline
             .layers
             .get_mut(&Depth(remove.depth))
             .unwrap()
@@ -138,16 +138,16 @@ impl SceneBuilder {
         self.current_frame = self.current_frame + Frame(1);
     }
 
-    pub fn finish(mut self, frame_count: Frame) -> Scene {
+    pub fn finish(mut self, frame_count: Frame) -> Timeline {
         // HACK(eddyb) this should be an error but it happens during testing.
         if self.current_frame != frame_count {
             eprintln!(
-                "SceneBuilder::finish: expected {} frames, found {}",
+                "TimelineBuilder::finish: expected {} frames, found {}",
                 frame_count.0, self.current_frame.0,
             );
         }
-        self.scene.frame_count = frame_count;
+        self.timeline.frame_count = frame_count;
 
-        self.scene
+        self.timeline
     }
 }
