@@ -264,8 +264,6 @@ impl Into<svg::node::Value> for Transform {
     }
 }
 
-// TODO(eddyb) render frames as SVG animations of each character
-// at a depth level, which only gets its transform animated.
 fn render_character(character: &Character) -> Group {
     let mut g = Group::new();
 
