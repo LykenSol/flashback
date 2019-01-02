@@ -1,11 +1,13 @@
 use crate::dictionary::{Character, CharacterId, Dictionary};
 use crate::scene::{Frame, Scene, SceneBuilder};
 use crate::shape::{Line, Shape};
+use std::cell::Cell;
 use std::collections::BTreeSet;
 use std::f64::consts::PI;
 use std::fmt::Write;
 use svg::node::element::{
-    path, Animate, AnimateTransform, ClipPath, Definitions, Group, Path, Rectangle, Use,
+    path, Animate, AnimateTransform, ClipPath, Definitions, Group, LinearGradient, Path,
+    RadialGradient, Rectangle, Stop, Use,
 };
 use swf_tree as swf;
 
@@ -70,15 +72,18 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
     let mut cx = Context {
         frame_rate: ufixed8p8_to_f64(&movie.header.frame_rate),
         dictionary,
-        svg_defs: Definitions::new().add(
-            ClipPath::new().set("id", "viewBox_clip").add(
-                Rectangle::new()
-                    .set("x", view_box.0)
-                    .set("y", view_box.1)
-                    .set("width", view_box.2)
-                    .set("height", view_box.3),
+        svg_defs: Cell::new(
+            Definitions::new().add(
+                ClipPath::new().set("id", "viewBox_clip").add(
+                    Rectangle::new()
+                        .set("x", view_box.0)
+                        .set("y", view_box.1)
+                        .set("width", view_box.2)
+                        .set("height", view_box.3),
+                ),
             ),
         ),
+        next_gradient_id: Cell::new(0),
     };
 
     let mut used_characters = BTreeSet::new();
@@ -87,15 +92,14 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
     });
 
     for character in used_characters {
-        let id = format!("c_{}", character.0);
-        let character = match cx.dictionary.get(character) {
+        let svg_character = match cx.dictionary.get(character) {
             Some(character) => cx.render_character(character),
             None => {
                 eprintln!("missing dictionary entry for {:?}", character);
                 continue;
             }
         };
-        cx.svg_defs = cx.svg_defs.add(character.set("id", id));
+        cx.add_svg_def(svg_character.set("id", format!("c_{}", character.0)));
     }
 
     let svg_body = cx
@@ -112,7 +116,7 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
                 .set("height", "100%")
                 .set("fill", bg),
         )
-        .add(cx.svg_defs)
+        .add(cx.svg_defs.into_inner())
         .add(svg_body)
 }
 
@@ -244,7 +248,8 @@ impl Into<svg::node::Value> for Transform {
 struct Context<'a> {
     frame_rate: f64,
     dictionary: Dictionary<'a>,
-    svg_defs: Definitions,
+    svg_defs: Cell<Definitions>,
+    next_gradient_id: Cell<usize>,
 }
 
 impl<'a> Context<'a> {
@@ -259,6 +264,11 @@ impl<'a> Context<'a> {
         }
     }
 
+    fn add_svg_def(&self, node: impl svg::Node) {
+        self.svg_defs
+            .set(self.svg_defs.replace(Definitions::new()).add(node));
+    }
+
     fn rgba_to_svg(&self, c: &swf::StraightSRgba8) -> String {
         if c.a == 0xff {
             format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
@@ -270,6 +280,49 @@ impl<'a> Context<'a> {
     fn fill_to_svg(&self, style: &swf::FillStyle) -> String {
         match style {
             swf::FillStyle::Solid(solid) => self.rgba_to_svg(&solid.color),
+            // FIXME(eddyb) don't ignore the gradient transformation matrix.
+            // TODO(eddyb) cache identical gradients.
+            swf::FillStyle::LinearGradient(gradient) => {
+                let mut svg_gradient = LinearGradient::new();
+                for stop in &gradient.gradient.colors {
+                    svg_gradient = svg_gradient.add(
+                        Stop::new()
+                            .set(
+                                "offset",
+                                format!("{}%", (stop.ratio as f64 / 255.0) * 100.0),
+                            )
+                            .set("stop-color", self.rgba_to_svg(&stop.color)),
+                    );
+                }
+
+                let id = self.next_gradient_id.get();
+                self.next_gradient_id.set(id + 1);
+
+                self.add_svg_def(svg_gradient.set("id", format!("grad_{}", id)));
+
+                format!("url(#grad_{})", id)
+            }
+            swf::FillStyle::RadialGradient(gradient) => {
+                // FIXME(eddyb) remove duplication between linear and radial gradients.
+                let mut svg_gradient = RadialGradient::new();
+                for stop in &gradient.gradient.colors {
+                    svg_gradient = svg_gradient.add(
+                        Stop::new()
+                            .set(
+                                "offset",
+                                format!("{}%", (stop.ratio as f64 / 255.0) * 100.0),
+                            )
+                            .set("stop-color", self.rgba_to_svg(&stop.color)),
+                    );
+                }
+
+                let id = self.next_gradient_id.get();
+                self.next_gradient_id.set(id + 1);
+
+                self.add_svg_def(svg_gradient.set("id", format!("grad_{}", id)));
+
+                format!("url(#grad_{})", id)
+            }
             _ => {
                 eprintln!("unsupported fill: {:?}", style);
                 // TODO(eddyb) implement gradient & bitmap support.
