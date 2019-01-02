@@ -69,7 +69,7 @@ pub fn export(movie: &swf::Movie) -> svg::Document {
         (r.x_min, r.y_min, r.x_max - r.x_min, r.y_max - r.y_min)
     };
 
-    let mut cx = Context {
+    let cx = Context {
         frame_rate: ufixed8p8_to_f64(&movie.header.frame_rate),
         dictionary,
         svg_defs: Cell::new(
