@@ -2,6 +2,7 @@ use crate::scene::Scene;
 use crate::shape::Shape;
 use std::collections::HashMap;
 use std::ops::Index;
+use swf_tree as swf;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CharacterId(pub u16);
@@ -10,6 +11,7 @@ pub struct CharacterId(pub u16);
 pub enum Character<'a> {
     Shape(Shape<'a>),
     Sprite(Scene),
+    DynamicText(&'a swf::tags::DefineDynamicText),
 }
 
 #[derive(Default, Debug)]

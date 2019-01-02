@@ -51,6 +51,9 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
                 let scene = scene_builder.finish(Frame(def.frame_count as u16));
                 dictionary.define(CharacterId(def.id), Character::Sprite(scene))
             }
+            swf::Tag::DefineDynamicText(def) => {
+                dictionary.define(CharacterId(def.id), Character::DynamicText(def))
+            }
             swf::Tag::PlaceObject(place) => scene_builder.place_object(place),
             swf::Tag::RemoveObject(remove) => scene_builder.remove_object(remove),
             swf::Tag::ShowFrame => scene_builder.advance_frame(),
@@ -284,6 +287,14 @@ impl Into<svg::node::Value> for Transform {
     }
 }
 
+fn rgba_to_svg(c: &swf::StraightSRgba8) -> String {
+    if c.a == 0xff {
+        format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
+    } else {
+        format!("rgba({}, {}, {}, {})", c.r, c.g, c.b, c.a)
+    }
+}
+
 fn render_character(character: &Character, frame_rate: f64) -> Group {
     match character {
         Character::Shape(shape) => {
@@ -293,14 +304,7 @@ fn render_character(character: &Character, frame_rate: f64) -> Group {
 
             let fill_color = |style: &swf::FillStyle| {
                 match style {
-                    swf::FillStyle::Solid(solid) => {
-                        let c = &solid.color;
-                        if c.a == 0xff {
-                            format!("#{:02x}{:02x}{:02x}", c.r, c.g, c.b)
-                        } else {
-                            format!("rgba({}, {}, {}, {})", c.r, c.g, c.b, c.a)
-                        }
-                    }
+                    swf::FillStyle::Solid(solid) => rgba_to_svg(&solid.color),
                     _ => {
                         // TODO(eddyb) implement gradient & bitmap support.
                         "#ff00ff".to_string()
@@ -372,5 +376,21 @@ fn render_character(character: &Character, frame_rate: f64) -> Group {
         // TODO(eddyb) figure out if there's anything to be done here
         // wrt synchronizing the animiation timelines of sprites.
         Character::Sprite(scene) => render_scene(scene, frame_rate),
+
+        Character::DynamicText(def) => {
+            let mut text = svg::node::element::Text::new().add(svg::node::Text::new(
+                def.text.as_ref().map_or("", |s| &s[..]),
+            ));
+
+            if let Some(size) = def.font_size {
+                text = text.set("font-size", size);
+            }
+
+            if let Some(color) = &def.color {
+                text = text.set("fill", rgba_to_svg(color));
+            }
+
+            Group::new().add(text)
+        }
     }
 }
