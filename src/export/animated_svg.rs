@@ -26,7 +26,7 @@ fn sfixed16p16_to_f64(x: &swf::fixed_point::Sfixed16P16) -> f64 {
     sfixed16p16_epsilons(x) as f64 / (1 << 16) as f64
 }
 
-pub fn render(movie: &swf::Movie) -> svg::Document {
+pub fn export(movie: &swf::Movie) -> svg::Document {
     let mut dictionary = Dictionary::default();
 
     let mut bg = [0, 0, 0];
@@ -93,7 +93,7 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
 
     for character in used_characters {
         let svg_character = match cx.dictionary.get(character) {
-            Some(character) => cx.render_character(character),
+            Some(character) => cx.export_character(character),
             None => {
                 eprintln!("missing dictionary entry for {:?}", character);
                 continue;
@@ -103,7 +103,7 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
     }
 
     let svg_body = cx
-        .render_timeline(&timeline)
+        .export_timeline(&timeline)
         .set("clip-path", "url(#viewBox_clip)");
 
     svg::Document::new()
@@ -398,7 +398,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn render_character(&self, character: &Character) -> Group {
+    fn export_character(&self, character: &Character) -> Group {
         match character {
             Character::Shape(shape) => {
                 let mut g = Group::new();
@@ -468,7 +468,7 @@ impl<'a> Context<'a> {
 
             // TODO(eddyb) figure out if there's anything to be done here
             // wrt synchronizing the animiation timelines of sprites.
-            Character::Sprite(timeline) => self.render_timeline(timeline),
+            Character::Sprite(timeline) => self.export_timeline(timeline),
 
             Character::DynamicText(def) => {
                 let mut text = svg::node::element::Text::new().add(svg::node::Text::new(
@@ -488,7 +488,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn render_timeline(&self, timeline: &Timeline) -> Group {
+    fn export_timeline(&self, timeline: &Timeline) -> Group {
         let frame_duration = 1.0 / self.frame_rate;
         let movie_duration = timeline.frame_count.0 as f64 * frame_duration;
 
