@@ -306,6 +306,7 @@ fn render_character(character: &Character, frame_rate: f64) -> Group {
                 match style {
                     swf::FillStyle::Solid(solid) => rgba_to_svg(&solid.color),
                     _ => {
+                        eprintln!("unsupported fill: {:?}", style);
                         // TODO(eddyb) implement gradient & bitmap support.
                         "#ff00ff".to_string()
                     }
