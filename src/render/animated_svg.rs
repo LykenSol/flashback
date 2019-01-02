@@ -35,8 +35,7 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
         match tag {
             swf::Tag::SetBackgroundColor(set_bg) => {
                 let c = &set_bg.color;
-                // HACK(eddyb) need black background for some reason.
-                // bg = [c.r, c.g, c.b];
+                bg = [c.r, c.g, c.b];
             }
             swf::Tag::DefineShape(def) => {
                 dictionary.define(CharacterId(def.id), Character::Shape(Shape::from(def)))
@@ -107,15 +106,14 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
         .render_timeline(&timeline)
         .set("clip-path", "url(#viewBox_clip)");
 
-    let bg = format!("#{:02x}{:02x}{:02x}", bg[0], bg[1], bg[2]);
     svg::Document::new()
         .set("viewBox", view_box)
-        .set("style", format!("background: {}", bg))
+        .set("style", "background: black")
         .add(
             Rectangle::new()
                 .set("width", "100%")
                 .set("height", "100%")
-                .set("fill", bg),
+                .set("fill", format!("#{:02x}{:02x}{:02x}", bg[0], bg[1], bg[2])),
         )
         .add(cx.svg_defs.into_inner())
         .add(svg_body)
