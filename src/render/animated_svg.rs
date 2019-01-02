@@ -55,12 +55,16 @@ pub fn render(movie: &swf::Movie) -> svg::Document {
         let r = &movie.header.frame_size;
         (r.x_min, r.y_min, r.x_max - r.x_min, r.y_max - r.y_min)
     };
-    let mut svg_document = svg::Document::new().set("viewBox", view_box).add(
-        Rectangle::new()
-            .set("width", "100%")
-            .set("height", "100%")
-            .set("fill", format!("#{:02x}{:02x}{:02x}", bg[0], bg[1], bg[2])),
-    );
+    let bg = format!("#{:02x}{:02x}{:02x}", bg[0], bg[1], bg[2]);
+    let mut svg_document = svg::Document::new()
+        .set("viewBox", view_box)
+        .set("style", format!("background: {}", bg))
+        .add(
+            Rectangle::new()
+                .set("width", "100%")
+                .set("height", "100%")
+                .set("fill", bg),
+        );
     let mut svg_defs = Definitions::new().add(
         ClipPath::new().set("id", "viewBox_clip").add(
             Rectangle::new()
