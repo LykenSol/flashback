@@ -11,7 +11,13 @@ fn main() {
             Ok(movie) => {
                 eprintln!("{}:", path.display());
                 // println!("{:#?}", movie);
-                let document = flashback::export::svg::export(&movie);
+                let document = flashback::export::svg::export(
+                    &movie,
+                    flashback::export::svg::Config {
+                        // TODO(eddyb) add a way to control this.
+                        use_js: false,
+                    },
+                );
                 svg::save(path.with_extension("svg"), &document).unwrap();
             }
             Err(e) => {

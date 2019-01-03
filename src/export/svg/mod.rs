@@ -1,10 +1,12 @@
 use crate::dictionary::{Character, CharacterId, Dictionary};
+use crate::export::js;
 use crate::shape::{Line, Shape};
 use crate::timeline::{Frame, Timeline, TimelineBuilder};
 use std::cell::Cell;
 use std::collections::BTreeSet;
 use svg::node::element::{
-    path, ClipPath, Definitions, Group, LinearGradient, Path, RadialGradient, Rectangle, Stop,
+    path, ClipPath, Definitions, Group, LinearGradient, Path, RadialGradient, Rectangle, Script,
+    Stop,
 };
 use swf_tree as swf;
 
@@ -18,7 +20,12 @@ fn ufixed8p8_to_f64(x: &swf::fixed_point::Ufixed8P8) -> f64 {
 
 mod animate;
 
-pub fn export(movie: &swf::Movie) -> svg::Document {
+#[derive(Default)]
+pub struct Config {
+    pub use_js: bool,
+}
+
+pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
     let mut dictionary = Dictionary::default();
 
     let mut bg = [0, 0, 0];
@@ -62,6 +69,7 @@ pub fn export(movie: &swf::Movie) -> svg::Document {
     };
 
     let cx = Context {
+        config,
         frame_rate: ufixed8p8_to_f64(&movie.header.frame_rate),
         dictionary,
         svg_defs: Cell::new(
@@ -94,11 +102,7 @@ pub fn export(movie: &swf::Movie) -> svg::Document {
         cx.add_svg_def(svg_character.set("id", format!("c_{}", character.0)));
     }
 
-    let svg_body = cx
-        .export_timeline(&timeline)
-        .set("clip-path", "url(#viewBox_clip)");
-
-    svg::Document::new()
+    let mut svg_document = svg::Document::new()
         .set("viewBox", view_box)
         .set("style", "background: black")
         .add(
@@ -106,12 +110,49 @@ pub fn export(movie: &swf::Movie) -> svg::Document {
                 .set("width", "100%")
                 .set("height", "100%")
                 .set("fill", format!("#{:02x}{:02x}{:02x}", bg[0], bg[1], bg[2])),
+        );
+
+    if !cx.config.use_js {
+        let svg_body = cx
+            .export_timeline(&timeline)
+            .set("clip-path", "url(#viewBox_clip)");
+        svg_document = svg_document.add(cx.svg_defs.into_inner()).add(svg_body);
+    } else {
+        svg_document = svg_document
+            .add(cx.svg_defs.into_inner())
+            .add(
+                Group::new()
+                    .set("id", "body")
+                    .set("clip-path", "url(#viewBox_clip)"),
+            )
+            .add(
+                js::code! {
+                    "var timeline = ", js::timeline::export(&timeline), ";\n",
+                    "var frame_rate = ", cx.frame_rate, ";\n\n",
+                    include_str!("runtime.js")
+                }
+                .to_svg(),
+            );
+    }
+
+    svg_document
+}
+
+impl js::Code {
+    fn to_svg(self) -> Script {
+        Script::new(
+            js::code! {
+                "// <![CDATA[\n",
+                self, "\n",
+                "// ]]>\n"
+            }
+            .0,
         )
-        .add(cx.svg_defs.into_inner())
-        .add(svg_body)
+    }
 }
 
 struct Context<'a> {
+    config: Config,
     frame_rate: f64,
     dictionary: Dictionary<'a>,
     svg_defs: Cell<Definitions>,
@@ -289,6 +330,7 @@ impl<'a> Context<'a> {
         }
     }
 
+    // FIXME(eddyb) this is not integrated at all with the JS mode.
     fn export_timeline(&self, timeline: &Timeline) -> Group {
         let frame_duration = 1.0 / self.frame_rate;
         let movie_duration = timeline.frame_count.0 as f64 * frame_duration;
