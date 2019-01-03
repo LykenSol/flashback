@@ -41,7 +41,6 @@ pub enum Op<'a> {
     GetVar(&'a str),
     SetVar(&'a str, Value<'a>),
 
-    GetFn(&'a str),
     Call(Value<'a>, Vec<Value<'a>>),
     // FIXME(eddyb) integrate with GetMember.
     CallMethod(Value<'a>, &'a str, Vec<Value<'a>>),
@@ -121,7 +120,7 @@ impl<'a> Code<'a> {
                     match (name, arg_count.as_i32()) {
                         (Value::Str(name), Some(arg_count)) => {
                             let args = (0..arg_count).map(|_| stack.pop().unwrap()).collect();
-                            ops.push(Op::GetFn(name));
+                            ops.push(Op::GetVar(name));
                             ops.push(Op::Call(Value::OpRes(ops.len() - 1), args));
                             stack.push(Value::OpRes(ops.len() - 1));
                         }

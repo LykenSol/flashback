@@ -7,6 +7,62 @@
         return document.createElementNS('http://www.w3.org/2000/svg', tag);
     }
 
+    var rt = {};
+    rt.mkGlobalScope = function() {
+        var o = Object.create(null);
+        function def(name, x) {
+            Object.defineProperty(o, name, { value: x });
+        }
+        def('hasOwnProperty', function(o, x) {
+            return Object.prototype.hasOwnProperty.call(o, x);
+        });
+        // HACK(eddyb) trap writes.
+        if(Object.freeze)
+            return Object.freeze(o);
+        return o;
+    };
+    rt.mkLocalScope = function(_this) {
+        var o = Object.create(_this);
+        function def(name, x) {
+            Object.defineProperty(o, name, { value: x });
+        }
+        def('this', _this);
+        // HACK(eddyb) trap writes.
+        if(Object.freeze)
+            return Object.freeze(o);
+        return o;
+    };
+    rt.mkMovieClip = function(timeline) {
+        var o = Object.create(null);
+        function def_get(name, f) {
+            Object.defineProperty(o, name, { get: f });
+        }
+        function def(name, x) {
+            Object.defineProperty(o, name, { value: x });
+        }
+        def('play', function() {
+            timeline.paused = false;
+        });
+        def('stop', function() {
+            timeline.paused = true;
+        });
+        def('gotoAndPlay', function(frame) {
+            timeline.frame = frame;
+            timeline.paused = false;
+        });
+        if(timeline.parent)
+            def_get('_parent', rt.mkMovieClip.bind(null, timeline.parent));
+        for(var name in timeline.named) {
+            var layer = timeline.layers[timeline.named[name]];
+            if(layer && layer.sprite)
+                def_get(name, rt.mkMovieClip.bind(null, layer.sprite));
+        }
+        // HACK(eddyb) trap writes.
+        if(Object.freeze)
+            return Object.freeze(o);
+        return api;
+    };
+
     function Timeline(data, container) {
         if(!(this instanceof Timeline))
             return new Timeline(data);
@@ -37,8 +93,14 @@
         });
     };
     Timeline.prototype.showFrame = function() {
-        if(this.paused)
+        if(this.paused) {
+            // Update sprites even when paused.
+            this.layers.forEach(function(layer) {
+                if(layer.sprite)
+                    layer.sprite.showFrame();
+            });
             return;
+        }
 
         var frame = this.frame;
         var named = this.named;
@@ -52,6 +114,7 @@
                 layer.use.removeAttribute('href');
                 if(layer.sprite) {
                     layer.sprite.detachLayers();
+                    layer.sprite.parent = null;
                     layer.sprite = null;
                 }
             }
@@ -68,8 +131,10 @@
                     layer.use.setAttribute('href', '#c_' + obj.character);
 
                     var sprite_data = sprites[obj.character];
-                    if(sprite_data)
+                    if(sprite_data) {
                         layer.sprite = new Timeline(sprite_data, layer.container);
+                        layer.sprite.parent = this;
+                    }
                 }
                 layer.container.setAttribute('transform', 'matrix(' + obj.matrix.join(' ') + ')');
                 if(layer.name != obj.name) {
@@ -85,51 +150,11 @@
 
         var action = this.actions[frame];
         if(action)
-            action(new ActionRuntime(this));
+            action(rt.mkGlobalScope(), rt.mkLocalScope(rt.mkMovieClip(this)));
 
-        this.frame = (frame + 1) % this.frame_count;
-    };
-
-    function ActionRuntime(timeline) {
-        if(!(this instanceof ActionRuntime))
-            return new ActionRuntime(data);
-
-        this.timeline = timeline;
-    }
-    ActionRuntime.prototype.play = function() {
-        this.timeline.paused = false;
-    };
-    ActionRuntime.prototype.stop = function() {
-        this.timeline.paused = true;
-    };
-    ActionRuntime.prototype.gotoFrame = function(frame) {
-        this.timeline.frame = frame;
-    };
-    ActionRuntime.prototype.getVar = function(name) {
-        var depth = this.timeline.named[name];
-        if(depth) {
-            var layer = this.timeline.layers[depth];
-            var api = Object.create(null);
-            if(layer.sprite) {
-                api.gotoAndPlay = function(frame) {
-                    layer.sprite.frame = frame;
-                    layer.sprite.paused = false;
-                };
-            }
-            return api;
-        }
-
-        console.error('trying to get var', name);
-    };
-    ActionRuntime.prototype.setVar = function(name, value) {
-        console.error('trying to set var', name, 'to', value);
-    };
-    ActionRuntime.prototype.getFn = function(name) {
-        if(name === 'hasOwnProperty')
-            return function(o, x) {
-                return Object.prototype.hasOwnProperty.call(o, x);
-            };
-        console.error('trying to get fn', name);
+        // HACK(eddyb) no idea what the interaction here should be.
+        if(!this.paused)
+            this.frame = (frame + 1) % this.frame_count;
     };
 
     timeline = new Timeline(timeline, document.getElementById('body'));

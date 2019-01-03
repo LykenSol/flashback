@@ -21,8 +21,8 @@ impl<'a> avm1::Value<'a> {
 pub fn export(codes: &[avm1::Code]) -> js::Code {
     let mut js_body = js::code! {};
 
-    fn rt_call(name: &str, args: impl IntoIterator<Item = js::Code>) -> js::Code {
-        js::call(js::code! { "rt.", name }, args)
+    fn this_call(name: &str, args: impl IntoIterator<Item = js::Code>) -> js::Code {
+        js::call(js::code! { "local.this.", name }, args)
     }
 
     for code in codes {
@@ -30,19 +30,22 @@ pub fn export(codes: &[avm1::Code]) -> js::Code {
             let assign = |value| js::code! { "var _", i, " = ", value };
             js_body += js::code! { "\n" };
             js_body += match op {
-                avm1::Op::Play => rt_call("play", vec![]),
-                avm1::Op::Stop => rt_call("stop", vec![]),
-                avm1::Op::GotoFrame(frame) => rt_call("gotoFrame", vec![js::code! { frame.0 }]),
+                avm1::Op::Play => this_call("play", vec![]),
+                avm1::Op::Stop => this_call("stop", vec![]),
+                avm1::Op::GotoFrame(frame) => this_call("gotoAndPlay", vec![js::code! { frame.0 }]),
 
-                avm1::Op::GetVar(name) => assign(rt_call("getVar", vec![js::string(name)])),
-                avm1::Op::SetVar(name, value) => {
-                    rt_call("setVar", vec![js::string(name), value.to_js()])
-                }
+                avm1::Op::GetVar(name) => assign(js::code! {
+                    "(", js::string(name), " in local) ? ",
+                    "local[", js::string(name), "] : ",
+                    "global[", js::string(name), "]"
+                }),
+                avm1::Op::SetVar(name, value) => js::code! {
+                    "local[", js::string(name), "] = ", value.to_js()
+                },
 
-                avm1::Op::GetFn(name) => assign(rt_call("getFn", vec![js::string(name)])),
-                avm1::Op::Call(callee, args) => {
-                    assign(js::call(callee.to_js(), args.iter().map(|arg| arg.to_js())))
-                }
+                avm1::Op::Call(callee, args) => assign(
+                    js::call(callee.to_js(), args.iter().map(|arg| arg.to_js()))
+                ),
                 avm1::Op::CallMethod(receiver, name, args) => assign(js::call(
                     js::code! { receiver.to_js(), ".", name },
                     args.iter().map(|arg| arg.to_js()),
@@ -52,5 +55,5 @@ pub fn export(codes: &[avm1::Code]) -> js::Code {
         }
     }
 
-    js::code! { "function(rt) {", js_body.indent(), "\n}" }
+    js::code! { "function(global, local) {", js_body.indent(), "\n}" }
 }
