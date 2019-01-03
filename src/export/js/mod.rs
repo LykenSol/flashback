@@ -10,7 +10,7 @@ pub use crate::__mod_hack__js_code as code;
 macro_rules! __mod_hack__js_code {
     ($($x:expr),*) => {{
         #[allow(unused_imports)]
-        use std::fmt::Write as _;
+        use std::fmt::Write;
 
         let mut _code = String::new();
         $(write!(_code, "{}", $x).unwrap();)*
