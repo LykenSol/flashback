@@ -1,19 +1,20 @@
 use crate::shape::Shape;
 use crate::timeline::Timeline;
+use image::DynamicImage;
 use std::collections::BTreeMap;
 use swf_tree as swf;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct CharacterId(pub u16);
 
-#[derive(Debug)]
 pub enum Character<'a> {
     Shape(Shape<'a>),
+    Bitmap(DynamicImage),
     Sprite(Timeline<'a>),
     DynamicText(&'a swf::tags::DefineDynamicText),
 }
 
-#[derive(Default, Debug)]
+#[derive(Default)]
 pub struct Dictionary<'a> {
     pub characters: BTreeMap<CharacterId, Character<'a>>,
 }

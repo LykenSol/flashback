@@ -1,10 +1,12 @@
+use crate::bitmap;
 use crate::dictionary::{Character, CharacterId, Dictionary};
 use crate::export::js;
 use crate::shape::{Line, Shape};
 use crate::timeline::{Frame, Timeline, TimelineBuilder};
+use image::GenericImageView;
 use svg::node::element::{
-    path, ClipPath, Definitions, Group, LinearGradient, Path, RadialGradient, Rectangle, Script,
-    Stop,
+    path, ClipPath, Definitions, Group, Image, LinearGradient, Path, Pattern, RadialGradient,
+    Rectangle, Script, Stop,
 };
 use swf_tree as swf;
 
@@ -58,6 +60,13 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
             swf::Tag::RemoveObject(remove) => timeline_builder.remove_object(remove),
             swf::Tag::DoAction(do_action) => timeline_builder.do_action(do_action),
             swf::Tag::ShowFrame => timeline_builder.advance_frame(),
+            swf::Tag::Unknown(tag) => {
+                if let Some(def) = bitmap::DefineBitmap::try_parse(tag) {
+                    dictionary.define(def.id, Character::Bitmap(def.image));
+                } else {
+                    eprintln!("unknown tag: {:?}", tag);
+                }
+            }
             _ => eprintln!("unknown tag: {:?}", tag),
         }
     }
@@ -77,14 +86,14 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
     };
 
     let mut js_sprites = js::code! {};
-    for (character_id, character) in &dictionary.characters {
-        let svg_character = cx.export_character(character);
-        cx.add_svg_def(svg_character.set("id", format!("c_{}", character_id.0)));
+    for (&id, character) in &dictionary.characters {
+        let svg_character = cx.export_character(id, character);
+        cx.add_svg_def(svg_character.set("id", format!("c_{}", id.0)));
 
         if cx.config.use_js {
             if let Character::Sprite(timeline) = character {
                 js_sprites += js::code! {
-                    "sprites[", character_id.0, "] = ", js::timeline::export(timeline), ";\n"
+                    "sprites[", id.0, "] = ", js::timeline::export(timeline), ";\n"
                 };
             }
         }
@@ -218,19 +227,21 @@ impl Context {
 
                 format!("url(#grad_{})", id)
             }
+            // FIXME(eddyb) don't ignore the bitmap transformation matrix,
+            // and the `repeating` and `smoothed` options.
+            swf::FillStyle::Bitmap(bitmap) => format!("url(#pat_{})", bitmap.bitmap_id),
             _ => {
                 eprintln!("unsupported fill: {:?}", style);
-                // TODO(eddyb) implement gradient & bitmap support.
+                // TODO(eddyb) implement focal gradient support.
                 "#ff00ff".to_string()
             }
         }
     }
 
-    fn export_character(&mut self, character: &Character) -> Group {
+    fn export_character(&mut self, id: CharacterId, character: &Character) -> Group {
+        let mut g = Group::new();
         match character {
             Character::Shape(shape) => {
-                let mut g = Group::new();
-
                 // TODO(eddyb) do the transforms need to take `shape.center` into account?
 
                 let path_data = |path: &[Line]| {
@@ -294,6 +305,27 @@ impl Context {
                 g
             }
 
+            Character::Bitmap(image) => {
+                let mut data_url = "data:image/png;base64,".to_string();
+                {
+                    let mut png = vec![];
+                    image.write_to(&mut png, image::PNG).unwrap();
+                    base64::encode_config_buf(&png, base64::STANDARD, &mut data_url);
+                }
+                g.add(
+                    Pattern::new()
+                        .set("id", format!("pat_{}", id.0))
+                        .set("width", 1)
+                        .set("height", 1)
+                        .add(
+                            Image::new()
+                                .set("href", data_url)
+                                .set("width", image.width() * 20)
+                                .set("height", image.height() * 20),
+                        ),
+                )
+            }
+
             // TODO(eddyb) figure out if there's anything to be done here
             // wrt synchronizing the animiation timelines of sprites.
             Character::Sprite(timeline) => self.export_timeline(timeline),
@@ -311,7 +343,7 @@ impl Context {
                     text = text.set("fill", self.rgba_to_svg(color));
                 }
 
-                Group::new().add(text)
+                g.add(text)
             }
         }
     }
