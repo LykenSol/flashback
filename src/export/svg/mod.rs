@@ -91,15 +91,25 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
         used_characters.insert(c);
     });
 
-    for character in used_characters {
-        let svg_character = match cx.dictionary.get(character) {
-            Some(character) => cx.export_character(character),
+    let mut js_sprites = js::code! {};
+    for character_id in used_characters {
+        let character = match cx.dictionary.get(character_id) {
+            Some(character) => character,
             None => {
-                eprintln!("missing dictionary entry for {:?}", character);
+                eprintln!("missing dictionary entry for {:?}", character_id);
                 continue;
             }
         };
-        cx.add_svg_def(svg_character.set("id", format!("c_{}", character.0)));
+        let svg_character = cx.export_character(character);
+        cx.add_svg_def(svg_character.set("id", format!("c_{}", character_id.0)));
+
+        if cx.config.use_js {
+            if let Character::Sprite(timeline) = character {
+                js_sprites += js::code! {
+                    "sprites[", character_id.0, "] = ", js::timeline::export(timeline), ";\n"
+                };
+            }
+        }
     }
 
     let mut svg_document = svg::Document::new()
@@ -128,6 +138,8 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
             .add(
                 js::code! {
                     "var timeline = ", js::timeline::export(&timeline), ";\n",
+                    "var sprites = [];\n",
+                    js_sprites,
                     "var frame_rate = ", cx.frame_rate, ";\n\n",
                     include_str!("runtime.js")
                 }
@@ -330,12 +342,14 @@ impl<'a> Context<'a> {
         }
     }
 
-    // FIXME(eddyb) this is not integrated at all with the JS mode.
     fn export_timeline(&self, timeline: &Timeline) -> Group {
         let frame_duration = 1.0 / self.frame_rate;
         let movie_duration = timeline.frame_count.0 as f64 * frame_duration;
 
         let mut g = Group::new();
+        if self.config.use_js {
+            return g;
+        }
         for layer in timeline.layers.values() {
             let mut animation = animate::ObjectAnimation::new(timeline.frame_count, movie_duration);
             for (&frame, obj) in &layer.frames {
