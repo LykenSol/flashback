@@ -2,8 +2,6 @@ use crate::dictionary::{Character, CharacterId, Dictionary};
 use crate::export::js;
 use crate::shape::{Line, Shape};
 use crate::timeline::{Frame, Timeline, TimelineBuilder};
-use std::cell::Cell;
-use std::collections::BTreeSet;
 use svg::node::element::{
     path, ClipPath, Definitions, Group, LinearGradient, Path, RadialGradient, Rectangle, Script,
     Stop,
@@ -70,38 +68,16 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
         (r.x_min, r.y_min, r.x_max - r.x_min, r.y_max - r.y_min)
     };
 
-    let cx = Context {
+    let mut cx = Context {
         config,
         frame_rate: ufixed8p8_to_f64(&movie.header.frame_rate),
-        dictionary,
-        svg_defs: Cell::new(
-            Definitions::new().add(
-                ClipPath::new().set("id", "viewBox_clip").add(
-                    Rectangle::new()
-                        .set("x", view_box.0)
-                        .set("y", view_box.1)
-                        .set("width", view_box.2)
-                        .set("height", view_box.3),
-                ),
-            ),
-        ),
-        next_gradient_id: Cell::new(0),
+
+        svg_defs: Definitions::new(),
+        next_gradient_id: 0,
     };
 
-    let mut used_characters = BTreeSet::new();
-    cx.each_used_character(&timeline, &mut |c| {
-        used_characters.insert(c);
-    });
-
     let mut js_sprites = js::code! {};
-    for character_id in used_characters {
-        let character = match cx.dictionary.get(character_id) {
-            Some(character) => character,
-            None => {
-                eprintln!("missing dictionary entry for {:?}", character_id);
-                continue;
-            }
-        };
+    for (character_id, character) in &dictionary.characters {
         let svg_character = cx.export_character(character);
         cx.add_svg_def(svg_character.set("id", format!("c_{}", character_id.0)));
 
@@ -124,14 +100,24 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
                 .set("fill", format!("#{:02x}{:02x}{:02x}", bg[0], bg[1], bg[2])),
         );
 
+    cx.add_svg_def(
+        ClipPath::new().set("id", "viewBox_clip").add(
+            Rectangle::new()
+                .set("x", view_box.0)
+                .set("y", view_box.1)
+                .set("width", view_box.2)
+                .set("height", view_box.3),
+        ),
+    );
+
     if !cx.config.use_js {
         let svg_body = cx
             .export_timeline(&timeline)
             .set("clip-path", "url(#viewBox_clip)");
-        svg_document = svg_document.add(cx.svg_defs.into_inner()).add(svg_body);
+        svg_document = svg_document.add(cx.svg_defs).add(svg_body);
     } else {
         svg_document = svg_document
-            .add(cx.svg_defs.into_inner())
+            .add(cx.svg_defs)
             .add(
                 Group::new()
                     .set("id", "body")
@@ -165,31 +151,17 @@ impl js::Code {
     }
 }
 
-struct Context<'a> {
+struct Context {
     config: Config,
     frame_rate: f64,
-    dictionary: Dictionary<'a>,
-    svg_defs: Cell<Definitions>,
-    next_gradient_id: Cell<usize>,
+
+    svg_defs: Definitions,
+    next_gradient_id: usize,
 }
 
-impl<'a> Context<'a> {
-    fn each_used_character(&self, timeline: &Timeline, f: &mut impl FnMut(CharacterId)) {
-        for layer in timeline.layers.values() {
-            for obj in layer.frames.values() {
-                if let Some(obj) = obj {
-                    f(obj.character);
-                    if let Some(Character::Sprite(timeline)) = self.dictionary.get(obj.character) {
-                        self.each_used_character(timeline, f);
-                    }
-                }
-            }
-        }
-    }
-
-    fn add_svg_def(&self, node: impl svg::Node) {
-        self.svg_defs
-            .set(self.svg_defs.replace(Definitions::new()).add(node));
+impl Context {
+    fn add_svg_def(&mut self, node: impl svg::Node) {
+        self.svg_defs = std::mem::replace(&mut self.svg_defs, Definitions::new()).add(node);
     }
 
     fn rgba_to_svg(&self, c: &swf::StraightSRgba8) -> String {
@@ -200,7 +172,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn fill_to_svg(&self, style: &swf::FillStyle) -> String {
+    fn fill_to_svg(&mut self, style: &swf::FillStyle) -> String {
         match style {
             swf::FillStyle::Solid(solid) => self.rgba_to_svg(&solid.color),
             // FIXME(eddyb) don't ignore the gradient transformation matrix.
@@ -218,8 +190,8 @@ impl<'a> Context<'a> {
                     );
                 }
 
-                let id = self.next_gradient_id.get();
-                self.next_gradient_id.set(id + 1);
+                let id = self.next_gradient_id;
+                self.next_gradient_id += 1;
 
                 self.add_svg_def(svg_gradient.set("id", format!("grad_{}", id)));
 
@@ -239,8 +211,8 @@ impl<'a> Context<'a> {
                     );
                 }
 
-                let id = self.next_gradient_id.get();
-                self.next_gradient_id.set(id + 1);
+                let id = self.next_gradient_id;
+                self.next_gradient_id += 1;
 
                 self.add_svg_def(svg_gradient.set("id", format!("grad_{}", id)));
 
@@ -254,7 +226,7 @@ impl<'a> Context<'a> {
         }
     }
 
-    fn export_character(&self, character: &Character) -> Group {
+    fn export_character(&mut self, character: &Character) -> Group {
         match character {
             Character::Shape(shape) => {
                 let mut g = Group::new();
