@@ -43,6 +43,19 @@ possible to handle some cases which result in deterministic animations.
 
 SVG animations also appear to have some sort of event support, could be usable.
 
+## Is this another "Open Source/Third-Party Flash Player" project?
+
+Ideally, no. The main difference is the split between the conversion step
+("recompilation" in a sense) and the runtime required to view/interact with
+the result of the conversion. A separate conversion step can afford to take
+longer than a player, in order to reduce the burden on the runtime, which
+can be smaller, or even non-existent (e.g. the animated SVG mode).
+
+It's not clear yet how well this model scales to the full Flash featureset,
+specifically the possibility of dynamically manipulating everything.
+This is why this is primarily an experiment, and may grow several
+different backends, to deal with as many usecases as possible.
+
 ## Relation to the [Open Flash] project
 
 [Open Flash]'s goals align well with this project, and its components will be
