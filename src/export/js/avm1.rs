@@ -44,9 +44,9 @@ pub fn export(codes: &[avm1::Code]) -> js::Code {
                     "local[", js::string(name), "] = ", value.to_js()
                 },
 
-                avm1::Op::Call(callee, args) => assign(
-                    js::call(callee.to_js(), args.iter().map(|arg| arg.to_js()))
-                ),
+                avm1::Op::Call(callee, args) => {
+                    assign(js::call(callee.to_js(), args.iter().map(|arg| arg.to_js())))
+                }
                 avm1::Op::CallMethod(receiver, name, args) => assign(js::call(
                     js::code! { receiver.to_js(), ".", name },
                     args.iter().map(|arg| arg.to_js()),

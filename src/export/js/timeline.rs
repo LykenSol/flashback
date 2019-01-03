@@ -1,16 +1,25 @@
 use crate::export::js;
-use crate::timeline::{Depth, Frame, Timeline};
+use crate::timeline::{default_color_transform, default_matrix, Depth, Frame, Timeline};
 use swf_tree as swf;
 
 // FIXME(eddyb) upstream these as methods on `swf-fixed` types.
+fn sfixed8p8_epsilons(x: &swf::fixed_point::Sfixed8P8) -> i16 {
+    unsafe { std::mem::transmute_copy(x) }
+}
 fn sfixed16p16_epsilons(x: &swf::fixed_point::Sfixed16P16) -> i32 {
     unsafe { std::mem::transmute_copy(x) }
+}
+fn sfixed8p8_to_f64(x: &swf::fixed_point::Sfixed8P8) -> f64 {
+    sfixed8p8_epsilons(x) as f64 / (1 << 8) as f64
 }
 fn sfixed16p16_to_f64(x: &swf::fixed_point::Sfixed16P16) -> f64 {
     sfixed16p16_epsilons(x) as f64 / (1 << 16) as f64
 }
 
 pub fn export_matrix(matrix: &swf::Matrix) -> js::Code {
+    if *matrix == default_matrix() {
+        return js::code! { "null" };
+    }
     js::array(
         [
             &matrix.scale_x,
@@ -25,6 +34,38 @@ pub fn export_matrix(matrix: &swf::Matrix) -> js::Code {
                 .iter()
                 .map(|x| js::code! { x }),
         ),
+    )
+}
+
+pub fn export_color_transform(color_transform: &swf::ColorTransformWithAlpha) -> js::Code {
+    if *color_transform == default_color_transform() {
+        return js::code! { "null" };
+    }
+    js::array(
+        [
+            sfixed8p8_to_f64(&color_transform.red_mult),
+            0.0,
+            0.0,
+            0.0,
+            color_transform.red_add as f64 / 255.0,
+            0.0,
+            sfixed8p8_to_f64(&color_transform.green_mult),
+            0.0,
+            0.0,
+            color_transform.green_add as f64 / 255.0,
+            0.0,
+            0.0,
+            sfixed8p8_to_f64(&color_transform.blue_mult),
+            0.0,
+            color_transform.blue_add as f64 / 255.0,
+            0.0,
+            0.0,
+            0.0,
+            sfixed8p8_to_f64(&color_transform.alpha_mult),
+            color_transform.alpha_add as f64 / 255.0,
+        ]
+        .iter()
+        .map(|x| js::code! { x }),
     )
 }
 
@@ -59,6 +100,10 @@ pub fn export(timeline: &Timeline) -> js::Code {
                                         obj.name
                                             .map(js::string)
                                             .unwrap_or_else(|| js::code! { "null" }),
+                                    ),
+                                    (
+                                        "color_transform",
+                                        export_color_transform(&obj.color_transform),
                                     ),
                                 ]),
                                 Some(None) => js::code! { "null" },

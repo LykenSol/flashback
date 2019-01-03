@@ -65,21 +65,36 @@
         return api;
     };
 
-    function Timeline(data, container) {
+    function Timeline(data, container, id_prefix) {
         if(!(this instanceof Timeline))
             return new Timeline(data);
 
+        id_prefix = id_prefix || '';
         this.frame_count = data.frame_count;
         this.named = Object.create(null);
         this.actions = data.actions;
         this.labels = data.labels;
-        this.layers = data.layers.map(function(frames, i) {
+        this.layers = data.layers.map(function(frames, depth) {
             var container = svg_element('g');
             var use = svg_element('use');
             container.appendChild(use);
-            return { frames: frames, container: container, use: use };
+
+            var filter = svg_element('filter');
+            filter.setAttribute('id', id_prefix + 'd_' + depth + '_filter');
+            var feColorMatrix = svg_element('feColorMatrix');
+            filter.appendChild(feColorMatrix);
+            container.appendChild(filter);
+
+            return {
+                frames: frames,
+                container: container,
+                use: use,
+                filter: filter,
+                feColorMatrix: feColorMatrix,
+            };
         });
         this.container = container;
+        this.id_prefix = id_prefix;
         this.attachLayers();
     }
     Timeline.prototype.paused = false;
@@ -107,8 +122,13 @@
 
         var frame = this.frame;
         var named = this.named;
+        var id_prefix = this.id_prefix;
         this.layers.forEach(function(layer, depth) {
             var obj = layer.frames[frame];
+
+            // Fully remove objects from the previous cycle.
+            if(!obj && frame == 0)
+                obj = null;
 
             // TODO(eddyb) this might need to take SWF's `is_move` into account.
             // Remove the old character if necessary.
@@ -135,11 +155,25 @@
 
                     var sprite_data = sprites[obj.character];
                     if(sprite_data) {
-                        layer.sprite = new Timeline(sprite_data, layer.container);
+                        layer.sprite = new Timeline(
+                            sprite_data,
+                            layer.container,
+                            id_prefix + 'd_' + depth + '_',
+                        );
                         layer.sprite.parent = this;
                     }
                 }
-                layer.container.setAttribute('transform', 'matrix(' + obj.matrix.join(' ') + ')');
+                if(obj.matrix) {
+                    layer.container.setAttribute('transform', 'matrix(' + obj.matrix.join(' ') + ')');
+                } else {
+                    layer.container.removeAttribute('transform');
+                }
+                if(obj.color_transform) {
+                    layer.feColorMatrix.setAttribute('values', obj.color_transform.join(' '));
+                    layer.container.setAttribute('filter', 'url(#' + layer.filter.id + ')');
+                } else {
+                    layer.container.removeAttribute('filter');
+                }
                 if(layer.name != obj.name) {
                     layer.name = obj.name;
                     named[layer.name] = depth;

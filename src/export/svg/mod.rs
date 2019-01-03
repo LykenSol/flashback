@@ -131,7 +131,7 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
 
     if !cx.config.use_js {
         let svg_body = cx
-            .export_timeline(&timeline)
+            .export_timeline(None, &timeline)
             .set("clip-path", "url(#viewBox_clip)");
         svg_document = svg_document.add(cx.svg_defs).add(svg_body);
     } else {
@@ -338,7 +338,7 @@ impl Context {
 
             // TODO(eddyb) figure out if there's anything to be done here
             // wrt synchronizing the animiation timelines of sprites.
-            Character::Sprite(timeline) => self.export_timeline(timeline),
+            Character::Sprite(timeline) => self.export_timeline(Some(id), timeline),
 
             Character::DynamicText(def) => {
                 let mut text = svg::node::element::Text::new().add(svg::node::Text::new(
@@ -358,7 +358,7 @@ impl Context {
         }
     }
 
-    fn export_timeline(&self, timeline: &Timeline) -> Group {
+    fn export_timeline(&self, id: Option<CharacterId>, timeline: &Timeline) -> Group {
         let frame_duration = 1.0 / self.frame_rate;
         let movie_duration = timeline.frame_count.0 as f64 * frame_duration;
 
@@ -366,8 +366,11 @@ impl Context {
         if self.config.use_js {
             return g;
         }
-        for layer in timeline.layers.values() {
-            let mut animation = animate::ObjectAnimation::new(timeline.frame_count, movie_duration);
+        let id_prefix = id.map_or(String::new(), |id| format!("c_{}_", id.0));
+        for (&depth, layer) in &timeline.layers {
+            let id_prefix = format!("{}d_{}_", id_prefix, depth.0);
+            let mut animation =
+                animate::ObjectAnimation::new(id_prefix, timeline.frame_count, movie_duration);
             for (&frame, obj) in &layer.frames {
                 animation.add(frame, obj.as_ref());
             }

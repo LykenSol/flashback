@@ -56,11 +56,15 @@ pub fn call(callee: Code, args: impl IntoIterator<Item = Code>) -> Code {
 }
 
 pub fn array(elems: impl IntoIterator<Item = Code>) -> Code {
-    let mut code = code! { "[\n" };
+    let mut code = code! { "[" };
     for elem in elems {
-        code += code! { "    ", elem.indent(), ",\n" };
+        if elem.0.is_empty() {
+            code += code! { "," };
+        } else {
+            code += code! { "\n    ", elem.indent(), "," };
+        }
     }
-    code += code! { "]" };
+    code += code! { "\n]" };
     code
 }
 
