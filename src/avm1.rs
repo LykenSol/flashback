@@ -61,6 +61,17 @@ impl<'a> Code<'a> {
 
         for action in actions {
             match action {
+                swf::avm1::Action::Play => ops.push(Op::Play),
+                swf::avm1::Action::Stop => ops.push(Op::Stop),
+                swf::avm1::Action::GotoFrame(goto) => {
+                    ops.push(Op::GotoFrame(Frame(goto.frame as u16)));
+                }
+                // All of frames are loaded ahead of time, no waiting needed.
+                swf::avm1::Action::WaitForFrame(_) => {}
+                swf::avm1::Action::WaitForFrame2(_) => {
+                    stack.pop();
+                }
+
                 swf::avm1::Action::ConstantPool(pool) => {
                     consts = &pool.constant_pool;
                 }
@@ -80,11 +91,6 @@ impl<'a> Code<'a> {
                 }
                 swf::avm1::Action::Pop => {
                     stack.pop();
-                }
-                swf::avm1::Action::Play => ops.push(Op::Play),
-                swf::avm1::Action::Stop => ops.push(Op::Stop),
-                swf::avm1::Action::GotoFrame(goto) => {
-                    ops.push(Op::GotoFrame(Frame(goto.frame as u16)));
                 }
                 swf::avm1::Action::GetVariable => match stack.pop().unwrap() {
                     Value::Str(name) => {
