@@ -1,3 +1,4 @@
+use crate::avm1;
 use crate::dictionary::CharacterId;
 use std::collections::BTreeMap;
 use std::ops::Add;
@@ -49,48 +50,52 @@ fn default_matrix() -> swf::Matrix {
 }
 
 #[derive(Debug)]
-pub struct Object {
+pub struct Object<'a> {
     pub character: CharacterId,
     pub matrix: swf::Matrix,
+    pub name: Option<&'a str>,
 }
 
-impl Clone for Object {
+impl<'a> Clone for Object<'a> {
     fn clone(&self) -> Self {
         Object {
             character: self.character,
             matrix: copy_matrix(&self.matrix),
+            name: self.name,
         }
     }
 }
 
-impl Object {
+impl<'a> Object<'a> {
     pub fn new(character: CharacterId) -> Self {
         Object {
             character,
             matrix: default_matrix(),
+            name: None,
         }
     }
 }
 
 #[derive(Default, Debug)]
-pub struct Layer {
-    pub frames: BTreeMap<Frame, Option<Object>>,
+pub struct Layer<'a> {
+    pub frames: BTreeMap<Frame, Option<Object<'a>>>,
 }
 
 #[derive(Default, Debug)]
-pub struct Timeline {
-    pub layers: BTreeMap<Depth, Layer>,
+pub struct Timeline<'a> {
+    pub layers: BTreeMap<Depth, Layer<'a>>,
+    pub actions: BTreeMap<Frame, Vec<avm1::Code<'a>>>,
     pub frame_count: Frame,
 }
 
 #[derive(Default)]
-pub struct TimelineBuilder {
-    timeline: Timeline,
+pub struct TimelineBuilder<'a> {
+    timeline: Timeline<'a>,
     current_frame: Frame,
 }
 
-impl TimelineBuilder {
-    pub fn place_object(&mut self, place: &swf::tags::PlaceObject) {
+impl<'a> TimelineBuilder<'a> {
+    pub fn place_object(&mut self, place: &'a swf::tags::PlaceObject) {
         let layer = self.timeline.layers.entry(Depth(place.depth)).or_default();
 
         // Find the last changed frame for this object, if it's not
@@ -123,6 +128,9 @@ impl TimelineBuilder {
         if let Some(matrix) = &place.matrix {
             obj.matrix = copy_matrix(matrix);
         }
+        if let Some(name) = &place.name {
+            obj.name = Some(name);
+        }
     }
 
     pub fn remove_object(&mut self, remove: &swf::tags::RemoveObject) {
@@ -134,11 +142,19 @@ impl TimelineBuilder {
             .insert(self.current_frame, None);
     }
 
+    pub fn do_action(&mut self, do_action: &'a swf::tags::DoAction) {
+        self.timeline
+            .actions
+            .entry(self.current_frame)
+            .or_default()
+            .push(avm1::Code::compile(&do_action.actions))
+    }
+
     pub fn advance_frame(&mut self) {
         self.current_frame = self.current_frame + Frame(1);
     }
 
-    pub fn finish(mut self, frame_count: Frame) -> Timeline {
+    pub fn finish(mut self, frame_count: Frame) -> Timeline<'a> {
         // HACK(eddyb) this should be an error but it happens during testing.
         if self.current_frame != frame_count {
             eprintln!(

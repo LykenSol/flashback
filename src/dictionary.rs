@@ -10,7 +10,7 @@ pub struct CharacterId(pub u16);
 #[derive(Debug)]
 pub enum Character<'a> {
     Shape(Shape<'a>),
-    Sprite(Timeline),
+    Sprite(Timeline<'a>),
     DynamicText(&'a swf::tags::DefineDynamicText),
 }
 

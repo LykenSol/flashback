@@ -1,3 +1,4 @@
+pub mod avm1;
 pub mod dictionary;
 pub mod export;
 pub mod shape;

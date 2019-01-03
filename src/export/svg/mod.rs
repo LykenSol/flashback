@@ -45,6 +45,7 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
                     match tag {
                         swf::Tag::PlaceObject(place) => timeline_builder.place_object(place),
                         swf::Tag::RemoveObject(remove) => timeline_builder.remove_object(remove),
+                        swf::Tag::DoAction(do_action) => timeline_builder.do_action(do_action),
                         swf::Tag::ShowFrame => timeline_builder.advance_frame(),
                         _ => eprintln!("unknown sprite tag: {:?}", tag),
                     }
@@ -57,6 +58,7 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
             }
             swf::Tag::PlaceObject(place) => timeline_builder.place_object(place),
             swf::Tag::RemoveObject(remove) => timeline_builder.remove_object(remove),
+            swf::Tag::DoAction(do_action) => timeline_builder.do_action(do_action),
             swf::Tag::ShowFrame => timeline_builder.advance_frame(),
             _ => eprintln!("unknown tag: {:?}", tag),
         }

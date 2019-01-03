@@ -12,6 +12,8 @@
             return new Timeline(data);
 
         this.frame_count = data.frame_count;
+        this.named = Object.create(null);
+        this.actions = data.actions;
         this.layers = data.layers.map(function(frames, i) {
             var container = svg_element('g');
             var use = svg_element('use');
@@ -20,8 +22,8 @@
         });
         this.container = container;
         this.attachLayers();
-        this.advanceFrames(0);
     }
+    Timeline.prototype.paused = false;
     Timeline.prototype.frame = 0;
     Timeline.prototype.attachLayers = function() {
         var container = this.container;
@@ -34,9 +36,13 @@
             layer.container.remove();
         });
     };
-    Timeline.prototype.advanceFrames = function(delta) {
-        var frame = this.frame = (this.frame + delta) % this.frame_count;
-        this.layers.forEach(function(layer) {
+    Timeline.prototype.showFrame = function() {
+        if(this.paused)
+            return;
+
+        var frame = this.frame;
+        var named = this.named;
+        this.layers.forEach(function(layer, depth) {
             var obj = layer.frames[frame];
 
             // TODO(eddyb) this might need to take SWF's `is_move` into account.
@@ -48,10 +54,12 @@
                     layer.sprite.detachLayers();
                     layer.sprite = null;
                 }
-            } else {
-                // Otherwise, update it.
-                if(layer.sprite)
-                    layer.sprite.advanceFrames(delta);
+            }
+
+            // Remove the old name if necessary.
+            if(obj === null || (obj && layer.name != obj.name)) {
+                named[layer.name] = null;
+                layer.name = null;
             }
 
             if(obj) {
@@ -64,8 +72,64 @@
                         layer.sprite = new Timeline(sprite_data, layer.container);
                 }
                 layer.container.setAttribute('transform', 'matrix(' + obj.matrix.join(' ') + ')');
+                if(layer.name != obj.name) {
+                    layer.name = obj.name;
+                    named[layer.name] = depth;
+                }
             }
+
+            // Update the sprite if it exists.
+            if(layer.sprite)
+                layer.sprite.showFrame();
         });
+
+        var action = this.actions[frame];
+        if(action)
+            action(new ActionRuntime(this));
+
+        this.frame = (frame + 1) % this.frame_count;
+    };
+
+    function ActionRuntime(timeline) {
+        if(!(this instanceof ActionRuntime))
+            return new ActionRuntime(data);
+
+        this.timeline = timeline;
+    }
+    ActionRuntime.prototype.play = function() {
+        this.timeline.paused = false;
+    };
+    ActionRuntime.prototype.stop = function() {
+        this.timeline.paused = true;
+    };
+    ActionRuntime.prototype.gotoFrame = function(frame) {
+        this.timeline.frame = frame;
+    };
+    ActionRuntime.prototype.getVar = function(name) {
+        var depth = this.timeline.named[name];
+        if(depth) {
+            var layer = this.timeline.layers[depth];
+            var api = Object.create(null);
+            if(layer.sprite) {
+                api.gotoAndPlay = function(frame) {
+                    layer.sprite.frame = frame;
+                    layer.sprite.paused = false;
+                };
+            }
+            return api;
+        }
+
+        console.error('trying to get var', name);
+    };
+    ActionRuntime.prototype.setVar = function(name, value) {
+        console.error('trying to set var', name, 'to', value);
+    };
+    ActionRuntime.prototype.getFn = function(name) {
+        if(name === 'hasOwnProperty')
+            return function(o, x) {
+                return Object.prototype.hasOwnProperty.call(o, x);
+            };
+        console.error('trying to get fn', name);
     };
 
     timeline = new Timeline(timeline, document.getElementById('body'));
@@ -78,10 +142,9 @@
         if(!start) start = now;
         // TODO(eddyb) figure out how to avoid absolute values.
         var frame = int((now - start) * frame_rate / 1000);
-        var delta = frame - last_frame;
-        if(delta)
-            timeline.advanceFrames(delta);
-        last_frame = frame;
+
+        for(; last_frame < frame; last_frame++)
+            timeline.showFrame();
     }
     window.requestAnimationFrame(update);
 })()

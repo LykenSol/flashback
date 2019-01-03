@@ -1,6 +1,7 @@
 use std::fmt;
 use std::ops::AddAssign;
 
+pub mod avm1;
 pub mod timeline;
 
 pub use crate::__mod_hack__js_code as code;
@@ -32,10 +33,32 @@ impl AddAssign for Code {
     }
 }
 
+impl Code {
+    pub fn indent(&self) -> Self {
+        Code(self.0.replace("\n", "\n    "))
+    }
+}
+
+pub fn string(s: &str) -> Code {
+    code! { format!("{:?}", s) }
+}
+
+pub fn call(callee: Code, args: impl IntoIterator<Item = Code>) -> Code {
+    let mut code = code! { callee, "(" };
+    for (i, arg) in args.into_iter().enumerate() {
+        if i > 0 {
+            code += code! { ", " };
+        }
+        code += arg;
+    }
+    code += code! { ")" };
+    code
+}
+
 pub fn array(elems: impl IntoIterator<Item = Code>) -> Code {
     let mut code = code! { "[\n" };
     for elem in elems {
-        code += code! { "    ", elem.0.replace("\n", "\n    "), ",\n" };
+        code += code! { "    ", elem.indent(), ",\n" };
     }
     code += code! { "]" };
     code
@@ -44,7 +67,7 @@ pub fn array(elems: impl IntoIterator<Item = Code>) -> Code {
 pub fn object<S: fmt::Display>(props: impl IntoIterator<Item = (S, Code)>) -> Code {
     let mut code = code! { "{\n" };
     for (name, value) in props {
-        code += code! { "    ", name, ": ", value.0.replace("\n", "\n    "), ",\n" };
+        code += code! { "    ", name, ": ", value.indent(), ",\n" };
     }
     code += code! { "}" };
     code

@@ -54,6 +54,12 @@ pub fn export(timeline: &Timeline) -> js::Code {
                                 Some(Some(obj)) => js::object(vec![
                                     ("character", js::code! { obj.character.0 }),
                                     ("matrix", export_matrix(&obj.matrix)),
+                                    (
+                                        "name",
+                                        obj.name
+                                            .map(js::string)
+                                            .unwrap_or_else(|| js::code! { "null" }),
+                                    ),
                                 ]),
                                 Some(None) => js::code! { "null" },
                                 None => js::code! {},
@@ -64,6 +70,21 @@ pub fn export(timeline: &Timeline) -> js::Code {
                 },
             )),
         ),
+        ("actions", {
+            let last_frame = timeline
+                .actions
+                .keys()
+                .cloned()
+                .rev()
+                .next()
+                .unwrap_or(Frame(0));
+            js::array((0..=last_frame.0).map(Frame).map(
+                |frame| match timeline.actions.get(&frame) {
+                    Some(codes) => js::avm1::export(codes),
+                    None => js::code! {},
+                },
+            ))
+        }),
         ("frame_count", js::code! { timeline.frame_count.0 }),
     ])
 }
