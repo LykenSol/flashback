@@ -47,6 +47,8 @@
             timeline.paused = true;
         });
         def('gotoAndPlay', function(frame) {
+            if(typeof frame === 'string')
+                frame = timeline.labels[frame];
             timeline.frame = frame;
             timeline.paused = false;
         });
@@ -70,6 +72,7 @@
         this.frame_count = data.frame_count;
         this.named = Object.create(null);
         this.actions = data.actions;
+        this.labels = data.labels;
         this.layers = data.layers.map(function(frames, i) {
             var container = svg_element('g');
             var use = svg_element('use');

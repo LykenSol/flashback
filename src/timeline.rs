@@ -2,6 +2,7 @@ use crate::avm1;
 use crate::dictionary::CharacterId;
 use std::collections::BTreeMap;
 use std::ops::Add;
+use std::str;
 use swf_tree as swf;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -81,10 +82,39 @@ pub struct Layer<'a> {
     pub frames: BTreeMap<Frame, Option<Object<'a>>>,
 }
 
+#[derive(Debug)]
+pub struct FrameLabel<'a> {
+    pub name: &'a str,
+    pub anchor: bool,
+}
+
+// HACK(eddyb) move this into swf-{tree,parser}.
+impl<'a> FrameLabel<'a> {
+    pub fn try_parse(tag: &'a swf::tags::Unknown) -> Option<Self> {
+        if tag.code != 43 {
+            return None;
+        }
+
+        let mut anchor = false;
+        let mut nil_pos = tag.data.len() - 1;
+        if tag.data[nil_pos] != 0 {
+            nil_pos -= 1;
+            anchor = true;
+        }
+        assert_eq!(tag.data[nil_pos], 0);
+
+        Some(FrameLabel {
+            name: str::from_utf8(&tag.data[..nil_pos]).unwrap(),
+            anchor,
+        })
+    }
+}
+
 #[derive(Default, Debug)]
 pub struct Timeline<'a> {
     pub layers: BTreeMap<Depth, Layer<'a>>,
     pub actions: BTreeMap<Frame, Vec<avm1::Code<'a>>>,
+    pub labels: BTreeMap<&'a str, Frame>,
     pub frame_count: Frame,
 }
 
@@ -148,6 +178,10 @@ impl<'a> TimelineBuilder<'a> {
             .entry(self.current_frame)
             .or_default()
             .push(avm1::Code::compile(&do_action.actions))
+    }
+
+    pub fn frame_label(&mut self, label: FrameLabel<'a>) {
+        self.timeline.labels.insert(label.name, self.current_frame);
     }
 
     pub fn advance_frame(&mut self) {

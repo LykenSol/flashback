@@ -85,6 +85,15 @@ pub fn export(timeline: &Timeline) -> js::Code {
                 },
             ))
         }),
+        (
+            "labels",
+            js::object(
+                timeline
+                    .labels
+                    .iter()
+                    .map(|(name, frame)| (js::string(name), js::code! { frame.0 })),
+            ),
+        ),
         ("frame_count", js::code! { timeline.frame_count.0 }),
     ])
 }

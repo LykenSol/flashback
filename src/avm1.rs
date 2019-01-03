@@ -37,6 +37,8 @@ pub enum Op<'a> {
     Play,
     Stop,
     GotoFrame(Frame),
+    // FIXME(eddyb) can we statically resolve this?
+    GotoLabel(&'a str),
 
     GetVar(&'a str),
     SetVar(&'a str, Value<'a>),
@@ -64,6 +66,9 @@ impl<'a> Code<'a> {
                 swf::avm1::Action::Stop => ops.push(Op::Stop),
                 swf::avm1::Action::GotoFrame(goto) => {
                     ops.push(Op::GotoFrame(Frame(goto.frame as u16)));
+                }
+                swf::avm1::Action::GotoLabel(goto) => {
+                    ops.push(Op::GotoLabel(&goto.label));
                 }
                 // All of frames are loaded ahead of time, no waiting needed.
                 swf::avm1::Action::WaitForFrame(_) => {}

@@ -2,7 +2,7 @@ use crate::bitmap;
 use crate::dictionary::{Character, CharacterId, Dictionary};
 use crate::export::js;
 use crate::shape::{Line, Shape};
-use crate::timeline::{Frame, Timeline, TimelineBuilder};
+use crate::timeline::{self, Frame, Timeline, TimelineBuilder};
 use image::GenericImageView;
 use svg::node::element::{
     path, ClipPath, Definitions, Group, Image, LinearGradient, Path, Pattern, RadialGradient,
@@ -39,6 +39,7 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
             swf::Tag::DefineShape(def) => {
                 dictionary.define(CharacterId(def.id), Character::Shape(Shape::from(def)))
             }
+            // FIXME(eddyb) deduplicate this.
             swf::Tag::DefineSprite(def) => {
                 let mut timeline_builder = TimelineBuilder::default();
                 for tag in &def.tags {
@@ -47,6 +48,13 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
                         swf::Tag::RemoveObject(remove) => timeline_builder.remove_object(remove),
                         swf::Tag::DoAction(do_action) => timeline_builder.do_action(do_action),
                         swf::Tag::ShowFrame => timeline_builder.advance_frame(),
+                        swf::Tag::Unknown(tag) => {
+                            if let Some(label) = timeline::FrameLabel::try_parse(tag) {
+                                timeline_builder.frame_label(label)
+                            } else {
+                                eprintln!("unknown sprite tag: {:?}", tag);
+                            }
+                        }
                         _ => eprintln!("unknown sprite tag: {:?}", tag),
                     }
                 }
@@ -63,6 +71,8 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
             swf::Tag::Unknown(tag) => {
                 if let Some(def) = bitmap::DefineBitmap::try_parse(tag) {
                     dictionary.define(def.id, Character::Bitmap(def.image));
+                } else if let Some(label) = timeline::FrameLabel::try_parse(tag) {
+                    timeline_builder.frame_label(label)
                 } else {
                     eprintln!("unknown tag: {:?}", tag);
                 }
