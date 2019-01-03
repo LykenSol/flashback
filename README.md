@@ -9,24 +9,39 @@ avoiding on-the-fly emulation as much as possible.
 
 ## Status
 
-*This is an **experimental** project, with no guarantees that it will ever become useful.*
+*This is an **experimental** project, with no progress/completion guarantees.*
 
-### Conversion to animated SVGs
+Feel free to try it out and report issues, but keep in mind that errors
+explicitly mentioning `swf-parser` or `Unknown {...}` tags are caused
+by limitations in the [Open Flash] components (also see relevant section).
 
-Only shapes with basic fill/stroke styles work, other "characters" are ignored.
-Objects' presence and their transformations are converted to SVG `<animate>`
-and `<animateTransform>` applied to groups of paths.
+### Conversion to SVG+JS
 
-It's possible to support more SWF features (e.g. sprites), but there are
-fundamental limitations, at least for script-less SVG.
+This is now the default mode. As much as possible (paths, bitmaps, etc.) is
+statically present in the SVG, while animations and actions are driven by JS.
+
+Note that relying on JS means `<img>` tags in HTML can't display these SVGs,
+and you need embed them, either directly, or via `<embed>` or `<object>`.
 
 `cargo run foo.swf` will output a `foo.svg` file, which hopefully resembles
 the original, at least partially. It can also process multiple files, so you
 can use `cargo run your-flash-stash/*.swf` to get a representative sample.
 
-Feel free to experiment and report issues, but keep in mind that errors
-explicitly mentioning `swf-parser` or `Unknown(Unknown {...})` tags are
-caused by limitations in the [Open Flash] components (see below).
+### Conversion to animated SVGs
+
+While currently not exposed via the CLI (see `src/bin/flashback.rs`), there
+is support for producing an animated SVG, which works with `<img>`.
+
+This uses `<animate>` and `<animateTransform>`, and supports all of the
+static resources (e.g. paths and bitmaps) that the SVG+JS mode does.
+
+There doesn't seem to be an easy way to handle sprites' independent animation,
+and right now multiple instances of the same sprite are always in sync.
+
+AVM1 (AS1/AS2) actions are not supported in this mode, although it might be
+possible to handle some cases which result in deterministic animations.
+
+SVG animations also appear to have some sort of event support, could be usable.
 
 ## Relation to the [Open Flash] project
 

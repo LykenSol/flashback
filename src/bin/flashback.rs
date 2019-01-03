@@ -15,7 +15,7 @@ fn main() {
                     &movie,
                     flashback::export::svg::Config {
                         // TODO(eddyb) add a way to control this.
-                        use_js: false,
+                        use_js: true,
                     },
                 );
                 svg::save(path.with_extension("svg"), &document).unwrap();
