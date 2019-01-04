@@ -97,13 +97,21 @@ pub fn export(timeline: &Timeline) -> js::Code {
                                     ("matrix", export_matrix(&obj.matrix)),
                                     (
                                         "name",
-                                        obj.name
-                                            .map(js::string)
-                                            .unwrap_or_else(|| js::code! { "null" }),
+                                        match obj.name {
+                                            Some(s) => js::string(s),
+                                            None => js::code! { "null" },
+                                        },
                                     ),
                                     (
                                         "color_transform",
                                         export_color_transform(&obj.color_transform),
+                                    ),
+                                    (
+                                        "ratio",
+                                        match obj.ratio {
+                                            Some(x) => js::code! { x },
+                                            None => js::code! { "null" },
+                                        },
                                     ),
                                 ]),
                                 Some(None) => js::code! { "null" },

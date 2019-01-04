@@ -90,6 +90,7 @@ pub struct Object<'a> {
     pub matrix: swf::Matrix,
     pub name: Option<&'a str>,
     pub color_transform: swf::ColorTransformWithAlpha,
+    pub ratio: Option<u16>,
 }
 
 impl<'a> Clone for Object<'a> {
@@ -99,6 +100,7 @@ impl<'a> Clone for Object<'a> {
             matrix: copy_matrix(&self.matrix),
             name: self.name,
             color_transform: copy_color_transform(&self.color_transform),
+            ratio: self.ratio,
         }
     }
 }
@@ -110,6 +112,7 @@ impl<'a> Object<'a> {
             matrix: default_matrix(),
             name: None,
             color_transform: default_color_transform(),
+            ratio: None,
         }
     }
 }
@@ -201,9 +204,11 @@ impl<'a> TimelineBuilder<'a> {
         if let Some(color_transform) = &place.color_transform {
             obj.color_transform = copy_color_transform(color_transform);
         }
+        if let Some(ratio) = place.ratio {
+            obj.ratio = Some(ratio);
+        }
 
         if place.class_name.is_some()
-            || place.ratio.is_some()
             || place.clip_depth.is_some()
             || place.filters.is_some()
             || place.blend_mode.is_some()

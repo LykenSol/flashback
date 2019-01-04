@@ -102,6 +102,8 @@
                 use: use,
                 filter: filter,
                 feColorMatrix: feColorMatrix,
+
+                ratio: null,
             };
         });
         this.root = this;
@@ -143,9 +145,13 @@
                 obj = null;
 
             // TODO(eddyb) this might need to take SWF's `is_move` into account.
+            // HACK(eddyb) there's the issue of what `ratio` does, see also
+            // http://wahlers.com.br/claus/blog/hacking-swf-2-placeobject-and-ratio/.
+
             // Remove the old character if necessary.
-            if(obj === null || (obj && layer.character != obj.character)) {
+            if(obj === null || (obj && (layer.character != obj.character || layer.ratio !== obj.ratio))) {
                 layer.character = -1;
+                layer.ratio = null;
                 layer.use.removeAttribute('href');
                 if(layer.sprite) {
                     layer.sprite.detachLayers();
@@ -162,8 +168,9 @@
             }
 
             if(obj) {
-                if(layer.character != obj.character) {
+                if(layer.character != obj.character || layer.ratio !== obj.ratio) {
                     layer.character = obj.character;
+                    layer.ratio = obj.ratio;
                     layer.use.setAttribute('href', '#c_' + obj.character);
 
                     var sprite_data = sprites[obj.character];
