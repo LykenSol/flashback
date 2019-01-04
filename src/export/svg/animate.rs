@@ -268,7 +268,8 @@ impl ObjectAnimation {
         // FIXME(eddyb) try to get rid of the redundant `<g>` here.
         let mut g = Group::new();
 
-        let mut obj = self.character.animate(Use::new(), "href");
+        // FIXME(eddyb) `xlink:href` probably needs to go through `attributeNS`.
+        let mut obj = self.character.animate(Use::new(), "xlink:href");
 
         if !self.color_matrix.key_times.is_empty() {
             let filter_id = format!("{}filter", self.id_prefix);

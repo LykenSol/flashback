@@ -105,6 +105,7 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
     }
 
     let mut svg_document = svg::Document::new()
+        .set("xmlns:xlink", "http://www.w3.org/1999/xlink")
         .set("viewBox", view_box)
         .set("style", "background: black")
         .add(
@@ -325,7 +326,7 @@ impl Context {
                         .set("height", 1)
                         .add(
                             Image::new()
-                                .set("href", data_url)
+                                .set("xlink:href", data_url)
                                 .set("width", image.width() * 20)
                                 .set("height", image.height() * 20),
                         ),

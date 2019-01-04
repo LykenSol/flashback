@@ -125,10 +125,10 @@
                         if(this.button && this.button.state != 'up')
                             href += '_' + this.button.state;
                         if(href != this.useHref)
-                            this.use.setAttribute('href', href);
+                            this.use.setAttributeNS('http://www.w3.org/1999/xlink', 'href', href);
                         this.useHref = href;
                     } else {
-                        this.use.removeAttribute('href');
+                        this.use.removeAttributeNS('http://www.w3.org/1999/xlink', 'href');
                         this.useHref = null;
                     }
                 }
