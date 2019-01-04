@@ -56,11 +56,16 @@
             this.goto(frame);
             timeline.paused = false;
         });
+        // HACK(eddyb) these are usually only used as the
+        // `getBytesLoaded() / getBytesTotal()` ratio.
         def('getBytesLoaded', function() {
             return 1;
         });
         def('getBytesTotal', function() {
             return 1;
+        });
+        def('getURL', function(url, target) {
+            window.open(url, target);
         });
         def_get('_root', rt.mkMovieClip.bind(null, timeline.root));
         if(timeline.parent)

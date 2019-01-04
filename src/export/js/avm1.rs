@@ -34,6 +34,9 @@ pub fn export(codes: &[avm1::Code]) -> js::Code {
                 avm1::Op::Stop => this_call("stop", vec![]),
                 avm1::Op::GotoFrame(frame) => this_call("goto", vec![js::code! { frame.0 }]),
                 avm1::Op::GotoLabel(name) => this_call("goto", vec![js::string(name)]),
+                avm1::Op::GetUrl(url, target) => {
+                    this_call("getURL", vec![js::string(url), js::string(target)])
+                }
 
                 avm1::Op::GetVar(name) => assign(js::code! {
                     "(", js::string(name), " in local) ? ",
