@@ -46,10 +46,14 @@
         def('stop', function() {
             timeline.paused = true;
         });
-        def('gotoAndPlay', function(frame) {
+        // HACK(eddyb) support for Goto{Frame,Label}.
+        def('goto', function(frame) {
             if(typeof frame === 'string')
                 frame = timeline.labels[frame];
             timeline.frame = frame;
+        });
+        def('gotoAndPlay', function(frame) {
+            this.goto(frame);
             timeline.paused = false;
         });
         def('getBytesLoaded', function() {
