@@ -88,6 +88,10 @@
 
             var filter = svg_element('filter');
             filter.setAttribute('id', id_prefix + 'd_' + depth + '_filter');
+            filter.setAttribute('x', 0);
+            filter.setAttribute('y', 0);
+            filter.setAttribute('width', 1);
+            filter.setAttribute('height', 1);
             var feColorMatrix = svg_element('feColorMatrix');
             filter.appendChild(feColorMatrix);
             container.appendChild(filter);

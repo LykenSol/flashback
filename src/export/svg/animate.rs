@@ -275,10 +275,16 @@ impl ObjectAnimation {
             obj = obj.set("filter", format!("url(#{})", filter_id));
 
             g = g.add(
-                Filter::new().set("id", filter_id).add(
-                    self.color_matrix
-                        .animate(Element::new("feColorMatrix"), "values"),
-                ),
+                Filter::new()
+                    .set("id", filter_id)
+                    .set("x", 0)
+                    .set("y", 0)
+                    .set("width", 1)
+                    .set("height", 1)
+                    .add(
+                        self.color_matrix
+                            .animate(Element::new("feColorMatrix"), "values"),
+                    ),
             );
         }
 
