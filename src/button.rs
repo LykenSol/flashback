@@ -13,24 +13,36 @@ pub struct PerState<T> {
     pub hit_test: T,
 }
 
-#[derive(Clone, Debug, Default)]
-pub struct PerOnHalf<T> {
-    pub idle: T,
-    pub over_up: T,
-    pub over_down: T,
-    pub out_down: T,
+#[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Event {
+    // Keyboard events.
+    KeyPress(u8),
+
+    // Mouse events.
+    HoverIn,
+    HoverOut,
+    Down,
+    Up,
+
+    // Push button mouse events.
+    DragOut,
+    DragIn,
+    UpOut,
+
+    // Menu button mouse events.
+    DownIn,
+    DownOut,
 }
 
 #[derive(Debug)]
-pub struct EventAction {
-    pub on: PerOnHalf<PerOnHalf<bool>>,
-    pub on_key_press: Option<u8>,
+pub struct EventHandler {
+    pub on: Vec<Event>,
     pub actions: Vec<swf::avm1::Action>,
 }
 
 pub struct Button {
     pub objects: PerState<BTreeMap<Depth, Object<'static>>>,
-    pub event_actions: Vec<EventAction>,
+    pub handlers: Vec<EventHandler>,
 }
 
 pub struct DefineButton {
@@ -78,6 +90,7 @@ impl DefineButton {
                 matrix,
                 name: None,
                 color_transform,
+                ratio: None,
             };
 
             if (flags & 1) != 0 {
@@ -96,34 +109,35 @@ impl DefineButton {
         assert_eq!(data[0], 0);
         data = &data[1..];
 
-        let mut event_actions = vec![];
+        let mut handlers = vec![];
         while action_offset != 0 && !data.is_empty() {
             let action_size = u16::from_le_bytes([data[0], data[1]]);
             let flags = u16::from_le_bytes([data[2], data[3]]);
             data = &data[4..];
 
-            let mut on = PerOnHalf::<PerOnHalf<_>>::default();
+            let mut on = vec![];
 
-            on.idle.over_up = (flags & 0x01) != 0;
-            on.over_up.idle = (flags & 0x02) != 0;
+            let mouse_events = &[
+                Event::HoverIn,
+                Event::HoverOut,
+                Event::Down,
+                Event::Up,
+                Event::DragOut,
+                Event::DragIn,
+                Event::UpOut,
+                Event::DownIn,
+                Event::DownOut,
+            ];
+            for (bit, &event) in mouse_events.iter().enumerate() {
+                if (flags & (1 << bit)) != 0 {
+                    on.push(event);
+                };
+            }
 
-            on.over_up.over_down = (flags & 0x04) != 0;
-            on.over_down.over_up = (flags & 0x08) != 0;
-
-            on.over_down.out_down = (flags & 0x10) != 0;
-            on.out_down.over_down = (flags & 0x20) != 0;
-
-            on.out_down.idle = (flags & 0x40) != 0;
-
-            on.idle.over_down = (flags & 0x80) != 0;
-            on.over_down.idle = (flags & 0x100) != 0;
-
-            let key_press = (flags >> 9) as u8;
-            let on_key_press = if key_press == 0 {
-                None
-            } else {
-                Some(key_press)
-            };
+            let key_code = (flags >> 9) as u8;
+            if key_code != 0 {
+                on.push(Event::KeyPress(key_code));
+            }
 
             let (rest, actions) = parse_actions_string(data).unwrap();
             data = rest;
@@ -131,27 +145,16 @@ impl DefineButton {
             assert_eq!(data[0], 0);
             data = &data[1..];
 
-            event_actions.push(EventAction {
-                on,
-                on_key_press,
-                actions,
-            });
+            handlers.push(EventHandler { on, actions });
 
             if action_size == 0 {
                 break;
             }
         }
-        for ev in &event_actions {
-            eprintln!("{:?}", ev);
-            crate::avm1::Code::compile(&ev.actions);
-        }
 
         Some(DefineButton {
             id,
-            button: Button {
-                objects,
-                event_actions,
-            },
+            button: Button { objects, handlers },
         })
     }
 }

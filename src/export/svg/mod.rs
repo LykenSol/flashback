@@ -5,6 +5,7 @@ use crate::export::js;
 use crate::shape::{Line, Shape};
 use crate::timeline::{self, Frame, Timeline, TimelineBuilder};
 use image::GenericImageView;
+use std::collections::BTreeMap;
 use svg::node::element::{
     path, ClipPath, Definitions, Group, Image, LinearGradient, Path, Pattern, RadialGradient,
     Rectangle, Script, Stop,
@@ -95,20 +96,12 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
         frame_rate: ufixed8p8_to_f64(&movie.header.frame_rate),
 
         svg_defs: Definitions::new(),
+        js_defs: js::code! {},
         next_gradient_id: 0,
     };
 
-    let mut js_sprites = js::code! {};
     for (&id, character) in &dictionary.characters {
         cx.export_character(id, character);
-
-        if cx.config.use_js {
-            if let Character::Sprite(timeline) = character {
-                js_sprites += js::code! {
-                    "sprites[", id.0, "] = ", js::timeline::export(timeline), ";\n"
-                };
-            }
-        }
     }
 
     let mut svg_document = svg::Document::new()
@@ -148,7 +141,8 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
                 js::code! {
                     "var timeline = ", js::timeline::export(&timeline), ";\n",
                     "var sprites = [];\n",
-                    js_sprites,
+                    "var buttons = [];\n",
+                    cx.js_defs,
                     "var frame_rate = ", cx.frame_rate, ";\n\n",
                     include_str!("runtime.js")
                 }
@@ -177,6 +171,7 @@ struct Context {
     frame_rate: f64,
 
     svg_defs: Definitions,
+    js_defs: js::Code,
     next_gradient_id: usize,
 }
 
@@ -339,7 +334,15 @@ impl Context {
 
             // TODO(eddyb) figure out if there's anything to be done here
             // wrt synchronizing the animiation timelines of sprites.
-            Character::Sprite(timeline) => g = self.export_timeline(Some(id), timeline),
+            Character::Sprite(timeline) => {
+                if self.config.use_js {
+                    self.js_defs += js::code! {
+                        "sprites[", id.0, "] = ", js::timeline::export(timeline), ";\n"
+                    };
+                    return;
+                }
+                g = self.export_timeline(Some(id), timeline);
+            }
 
             Character::Button(button) => {
                 let states = [
@@ -359,6 +362,70 @@ impl Context {
                     }
                     self.add_svg_def(g.set("id", svg_id));
                 }
+
+                if self.config.use_js {
+                    let js_button = js::code! { "buttons[", id.0, "]" };
+                    self.js_defs += js::code! {
+                        js_button, " = ", js::object(vec![
+                            ("mouse", js::code! { "{}" }),
+                            ("keyPress", js::array(vec![])),
+                        ]), ";\n"
+                    };
+
+                    let handler_code: Vec<_> = button
+                        .handlers
+                        .iter()
+                        .map(|handler| crate::avm1::Code::compile(&handler.actions))
+                        .collect();
+
+                    // Try to reuse functions as much as possible,
+                    // while having only one function per `Event`.
+                    // Note that this will still result in code
+                    // being duplicated, but hopefully not too much.
+                    let mut event_to_handlerset = BTreeMap::new();
+                    for (i, handler) in button.handlers.iter().enumerate() {
+                        for &event in &handler.on {
+                            event_to_handlerset.entry(event).or_insert(vec![]).push(i);
+                        }
+                    }
+                    let mut handlerset_to_events = BTreeMap::new();
+                    for (event, handlers) in event_to_handlerset {
+                        handlerset_to_events
+                            .entry(handlers)
+                            .or_insert(vec![])
+                            .push(event);
+                    }
+
+                    for (handlers, events) in handlerset_to_events {
+                        // Generate `buttons[x].mouse.foo = buttons[x].mouse.bar = ...;`.
+                        for event in events {
+                            self.js_defs += js::code! { js_button, "." };
+                            let mouse_event = match event {
+                                button::Event::KeyPress(c) => {
+                                    self.js_defs += js::code! { "keyPress[", c, "] = " };
+                                    continue;
+                                }
+
+                                button::Event::HoverIn => "hoverIn",
+                                button::Event::HoverOut => "hoverOut",
+                                button::Event::Down => "down",
+                                button::Event::Up => "up",
+                                button::Event::DragOut => "dragOut",
+                                button::Event::DragIn => "dragIn",
+                                button::Event::UpOut => "upOut",
+                                button::Event::DownIn => "downIn",
+                                button::Event::DownOut => "downOut",
+                            };
+                            self.js_defs += js::code! { "mouse.", mouse_event, " = " };
+                        }
+
+                        self.js_defs +=
+                            js::avm1::export(handlers.iter().map(|&i| &handler_code[i]));
+
+                        self.js_defs += js::code! { ";\n" };
+                    }
+                }
+
                 return;
             }
 

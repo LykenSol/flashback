@@ -113,6 +113,25 @@
                 feColorMatrix: feColorMatrix,
 
                 ratio: null,
+
+                isHover: function() {
+                    // FIXME(eddyb) figure out how much this needs polyfill.
+                    return this.container.matches(':hover');
+                },
+
+                updateUseHref: function() {
+                    if(this.character > 0) {
+                        var href = '#c_' + this.character;
+                        if(this.button && this.button.state != 'up')
+                            href += '_' + this.button.state;
+                        if(href != this.useHref)
+                            this.use.setAttribute('href', href);
+                        this.useHref = href;
+                    } else {
+                        this.use.removeAttribute('href');
+                        this.useHref = null;
+                    }
+                }
             };
         });
         this.root = this;
@@ -136,14 +155,17 @@
     };
     Timeline.prototype.showFrame = function() {
         if(this.paused && this.renderedFrame == this.frame) {
-            // Update sprites even when paused.
+            // Update sprites and buttons even when paused.
             this.layers.forEach(function(layer) {
                 if(layer.sprite)
                     layer.sprite.showFrame();
+                if(layer.button)
+                    layer.button.showFrame();
             });
             return;
         }
 
+        var movieClip = rt.mkMovieClip(this);
         var frame = this.frame;
         var renderedFrame = this.renderedFrame;
         var named = this.named;
@@ -169,12 +191,14 @@
             if(obj === null || (obj && (layer.character != obj.character || layer.ratio !== obj.ratio))) {
                 layer.character = -1;
                 layer.ratio = null;
-                layer.use.removeAttribute('href');
                 if(layer.sprite) {
                     layer.sprite.detachLayers();
                     layer.sprite.parent = null;
                     layer.sprite.root = null;
                     layer.sprite = null;
+                }
+                if(layer.button) {
+                    layer.button = null;
                 }
             }
 
@@ -188,7 +212,6 @@
                 if(layer.character != obj.character || layer.ratio !== obj.ratio) {
                     layer.character = obj.character;
                     layer.ratio = obj.ratio;
-                    layer.use.setAttribute('href', '#c_' + obj.character);
 
                     var sprite_data = sprites[obj.character];
                     if(sprite_data) {
@@ -199,6 +222,57 @@
                         );
                         layer.sprite.parent = this;
                         layer.sprite.root = this.root;
+                    }
+                    var button_data = buttons[obj.character];
+                    if(button_data) {
+                        var button = layer.button = {
+                            state: 'up',
+                            attachListeners: function() {
+                                layer.use.addEventListener('mouseover', this.mouse_over_out_up);
+                                layer.use.addEventListener('mouseout', this.mouse_over_out_up);
+                                layer.use.addEventListener('mouseup', this.mouse_over_out_up);
+                                layer.use.addEventListener('mousedown', this.mouse_down);
+                            },
+                            detachListeners: function() {
+                                layer.use.removeEventListener('mouseover', this.mouse_over_out_up);
+                                layer.use.removeEventListener('mouseout', this.mouse_over_out_up);
+                                layer.use.removeEventListener('mouseup', this.mouse_over_out_up);
+                                layer.use.removeEventListener('mousedown', this.mouse_down);
+                            },
+                            mouse_over_out_up: function(ev) {
+                                button.transition(layer.isHover() ? 'over' : 'up');
+                            },
+                            mouse_down: function() {
+                                button.transition('down');
+                            },
+                            showFrame: function() {
+                                if(layer.button !== this)
+                                    return;
+                                if(!layer.isHover())
+                                    this.transition('up');
+                            },
+                            transition: function(to) {
+                                if(layer.button !== this)
+                                    return;
+                                if(this.state == to)
+                                    return;
+                                var event;
+                                if(this.state == 'up' && to == 'over') {
+                                    event = 'hoverIn';
+                                } else if(this.state == 'over' && to == 'up') {
+                                    event = 'hoverOut';
+                                } else if(this.state == 'over' && to == 'down') {
+                                    event = 'down';
+                                } else if(this.state == 'down' && to == 'over') {
+                                    event = 'up';
+                                }
+                                this.state = to;
+                                var handler = event && button_data.mouse[event];
+                                if(handler)
+                                    handler(rt.mkGlobalScope(), rt.mkLocalScope(movieClip));
+                            },
+                        };
+                        button.attachListeners();
                     }
                 }
                 if(obj.matrix) {
@@ -218,16 +292,21 @@
                 }
             }
 
-            // Update the sprite if it exists.
+            // Update the sprite or button if it exists.
             if(layer.sprite)
                 layer.sprite.showFrame();
+            if(layer.button)
+                layer.button.showFrame();
+
+            // Update the <use> element.
+            layer.updateUseHref();
         });
 
         this.renderedFrame = frame;
 
         var action = this.actions[frame];
         if(action)
-            action(rt.mkGlobalScope(), rt.mkLocalScope(rt.mkMovieClip(this)));
+            action(rt.mkGlobalScope(), rt.mkLocalScope(movieClip));
 
         // HACK(eddyb) no idea what the interaction here should be.
         if(!this.paused)

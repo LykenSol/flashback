@@ -18,7 +18,7 @@ impl<'a> avm1::Value<'a> {
     }
 }
 
-pub fn export(codes: &[avm1::Code]) -> js::Code {
+pub fn export<'a, 'b: 'a>(codes: impl IntoIterator<Item = &'a avm1::Code<'b>>) -> js::Code {
     let mut js_body = js::code! {};
 
     fn this_call(name: &str, args: impl IntoIterator<Item = js::Code>) -> js::Code {
