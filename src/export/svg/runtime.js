@@ -176,19 +176,18 @@
 
         this.layers.forEach(function(layer, depth) {
             var obj, i;
-            for(var i = frame; i > renderedFrame && !obj && obj !== null; i--)
+            for(i = frame; i > renderedFrame && !obj && obj !== null; i--)
                 obj = layer.frames[i];
 
             // Fully remove anything not present yet.
-            if(i == -1)
-                obj = null;
+            var removeOld = renderedFrame == -1 || obj === null;
 
             // TODO(eddyb) this might need to take SWF's `is_move` into account.
             // HACK(eddyb) there's the issue of what `ratio` does, see also
             // http://wahlers.com.br/claus/blog/hacking-swf-2-placeobject-and-ratio/.
 
             // Remove the old character if necessary.
-            if(obj === null || (obj && (layer.character != obj.character || layer.ratio !== obj.ratio))) {
+            if(removeOld || (obj && (layer.character != obj.character || layer.ratio !== obj.ratio))) {
                 layer.character = -1;
                 layer.ratio = null;
                 if(layer.sprite) {
@@ -203,7 +202,7 @@
             }
 
             // Remove the old name if necessary.
-            if(obj === null || (obj && layer.name != obj.name)) {
+            if(removeOld || (obj && layer.name != obj.name)) {
                 named[layer.name] = null;
                 layer.name = null;
             }
