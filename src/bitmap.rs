@@ -1,5 +1,5 @@
 use crate::dictionary::CharacterId;
-use image::{DynamicImage, Rgb, RgbImage};
+use image::{DynamicImage, Rgb, RgbImage, Rgba, RgbaImage};
 use swf_tree as swf;
 
 pub struct DefineBitmap {
@@ -10,9 +10,10 @@ pub struct DefineBitmap {
 // HACK(eddyb) move this into swf-{tree,parser}.
 impl DefineBitmap {
     pub fn try_parse(tag: &swf::tags::Unknown) -> Option<Self> {
-        if tag.code != 20 {
+        if tag.code != 20 && tag.code != 36 {
             return None;
         }
+        let has_alpha = tag.code == 36;
 
         let id = CharacterId(u16::from_le_bytes([tag.data[0], tag.data[1]]));
         let format = tag.data[2];
@@ -26,28 +27,43 @@ impl DefineBitmap {
         };
 
         let data = inflate::inflate_bytes_zlib(compressed_data).unwrap();
-        let color_table = &data[..color_table_len * 3];
-        let data = &data[color_table_len * 3..];
+
+        let (color_table, data) = data.split_at(color_table_len * (3 + has_alpha as usize));
 
         // FIXME(eddyb) this is probably really inefficient.
-        let px_to_rgb = |px: &[u8]| match format {
-            3 => {
-                let i = px[0] as usize * 3;
-                [color_table[i], color_table[i + 1], color_table[i + 2]]
-            }
-            4 => {
-                let rgb = u16::from_be_bytes([px[0], px[1]]);
-                let (r, g, b) = (rgb >> 10, (rgb >> 5) & 0x1f, rgb & 0x1f);
+        let rgb_px = |px: &[u8]| {
+            let px = match format {
+                3 => {
+                    let i = px[0] as usize * 3;
 
-                // Uniformly map a 5-bit channel to a 8-bit one by repeating
-                // the top 3 bits below the original 5 bits, to turn e.g.
-                // 0x00 into 0x00, 0x10 into 0x84 and 0x1f into 0xff.
-                let extend = |x| ((x << 3) | (x >> 2)) as u8;
+                    &color_table[i..i + 3]
+                }
+                4 => {
+                    let rgb = u16::from_be_bytes([px[0], px[1]]);
+                    let (r, g, b) = (rgb >> 10, (rgb >> 5) & 0x1f, rgb & 0x1f);
 
-                [extend(r), extend(g), extend(b)]
-            }
-            5 => [px[0], px[1], px[2]],
-            _ => unreachable!(),
+                    // Uniformly map a 5-bit channel to a 8-bit one by repeating
+                    // the top 3 bits below the original 5 bits, to turn e.g.
+                    // 0x00 into 0x00, 0x10 into 0x84 and 0x1f into 0xff.
+                    let extend = |x| ((x << 3) | (x >> 2)) as u8;
+
+                    return Rgb([extend(r), extend(g), extend(b)]);
+                }
+                5 => px,
+                _ => unreachable!(),
+            };
+            Rgb([px[0], px[1], px[2]])
+        };
+        let rgba_px = |px: &[u8]| {
+            let px = match format {
+                3 => {
+                    let i = px[0] as usize * 4;
+                    &color_table[i..i + 4]
+                }
+                5 => px,
+                _ => unreachable!(),
+            };
+            Rgba([px[0], px[1], px[2], px[3]])
         };
 
         let px_bytes = match format {
@@ -60,14 +76,19 @@ impl DefineBitmap {
             }
         };
         let row_len = (width as usize * px_bytes + 3) / 4 * 4;
-        let image = RgbImage::from_fn(width as u32, height as u32, |x, y| {
-            let i = y as usize * row_len + x as usize * px_bytes;
-            Rgb(px_to_rgb(&data[i..i + px_bytes]))
-        });
+        let image = if has_alpha {
+            // FIXME(eddyb) figure out how to deduplicate all of this.
+            DynamicImage::ImageRgba8(RgbaImage::from_fn(width as u32, height as u32, |x, y| {
+                let i = y as usize * row_len + x as usize * px_bytes;
+                rgba_px(&data[i..i + px_bytes])
+            }))
+        } else {
+            DynamicImage::ImageRgb8(RgbImage::from_fn(width as u32, height as u32, |x, y| {
+                let i = y as usize * row_len + x as usize * px_bytes;
+                rgb_px(&data[i..i + px_bytes])
+            }))
+        };
 
-        Some(DefineBitmap {
-            id,
-            image: DynamicImage::ImageRgb8(image),
-        })
+        Some(DefineBitmap { id, image })
     }
 }
