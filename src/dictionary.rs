@@ -1,3 +1,4 @@
+use crate::button::Button;
 use crate::shape::Shape;
 use crate::timeline::Timeline;
 use image::DynamicImage;
@@ -11,6 +12,7 @@ pub enum Character<'a> {
     Shape(Shape<'a>),
     Bitmap(DynamicImage),
     Sprite(Timeline<'a>),
+    Button(Button),
     DynamicText(&'a swf::tags::DefineDynamicText),
 }
 

@@ -1,4 +1,5 @@
 use crate::bitmap;
+use crate::button;
 use crate::dictionary::{Character, CharacterId, Dictionary};
 use crate::export::js;
 use crate::shape::{Line, Shape};
@@ -71,6 +72,8 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
             swf::Tag::Unknown(tag) => {
                 if let Some(def) = bitmap::DefineBitmap::try_parse(tag) {
                     dictionary.define(def.id, Character::Bitmap(def.image));
+                } else if let Some(def) = button::DefineButton::try_parse(tag) {
+                    dictionary.define(def.id, Character::Button(def.button));
                 } else if let Some(label) = timeline::FrameLabel::try_parse(tag) {
                     timeline_builder.frame_label(label)
                 } else {
@@ -97,8 +100,7 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
 
     let mut js_sprites = js::code! {};
     for (&id, character) in &dictionary.characters {
-        let svg_character = cx.export_character(id, character);
-        cx.add_svg_def(svg_character.set("id", format!("c_{}", id.0)));
+        cx.export_character(id, character);
 
         if cx.config.use_js {
             if let Character::Sprite(timeline) = character {
@@ -248,7 +250,8 @@ impl Context {
         }
     }
 
-    fn export_character(&mut self, id: CharacterId, character: &Character) -> Group {
+    fn export_character(&mut self, id: CharacterId, character: &Character) {
+        let svg_id = format!("c_{}", id.0);
         let mut g = Group::new();
         match character {
             Character::Shape(shape) => {
@@ -311,8 +314,6 @@ impl Context {
                         );
                     }
                 }
-
-                g
             }
 
             Character::Bitmap(image) => {
@@ -322,7 +323,7 @@ impl Context {
                     image.write_to(&mut png, image::PNG).unwrap();
                     base64::encode_config_buf(&png, base64::STANDARD, &mut data_url);
                 }
-                g.add(
+                g = g.add(
                     Pattern::new()
                         .set("id", format!("pat_{}", id.0))
                         .set("width", 1)
@@ -333,12 +334,33 @@ impl Context {
                                 .set("width", image.width() * 20)
                                 .set("height", image.height() * 20),
                         ),
-                )
+                );
             }
 
             // TODO(eddyb) figure out if there's anything to be done here
             // wrt synchronizing the animiation timelines of sprites.
-            Character::Sprite(timeline) => self.export_timeline(Some(id), timeline),
+            Character::Sprite(timeline) => g = self.export_timeline(Some(id), timeline),
+
+            Character::Button(button) => {
+                let states = [
+                    ("", &button.objects.up),
+                    ("_over", &button.objects.over),
+                    ("_down", &button.objects.down),
+                    ("_hit_test", &button.objects.hit_test),
+                ];
+                for &(suffix, objects) in &states {
+                    let mut g = Group::new();
+                    let svg_id = format!("{}{}", svg_id, suffix);
+                    for (&depth, obj) in objects {
+                        let id_prefix = format!("{}_d_{}_", svg_id, depth.0);
+                        let mut animation = animate::ObjectAnimation::new(id_prefix, Frame(1), 1.0);
+                        animation.add(Frame(0), Some(obj));
+                        g = g.add(animation.to_svg());
+                    }
+                    self.add_svg_def(g.set("id", svg_id));
+                }
+                return;
+            }
 
             Character::DynamicText(def) => {
                 let mut text = svg::node::element::Text::new().add(svg::node::Text::new(
@@ -353,9 +375,11 @@ impl Context {
                     text = text.set("fill", self.rgba_to_svg(color));
                 }
 
-                g.add(text)
+                g = g.add(text);
             }
         }
+
+        self.add_svg_def(g.set("id", svg_id));
     }
 
     fn export_timeline(&self, id: Option<CharacterId>, timeline: &Timeline) -> Group {
