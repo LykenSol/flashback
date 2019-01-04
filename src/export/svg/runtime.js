@@ -165,7 +165,7 @@
             return;
         }
 
-        var movieClip = rt.mkMovieClip(this);
+        var mkMovieClip = rt.mkMovieClip.bind(null, this);
         var frame = this.frame;
         var renderedFrame = this.renderedFrame;
         var named = this.named;
@@ -202,7 +202,7 @@
             }
 
             // Remove the old name if necessary.
-            if(removeOld || (obj && layer.name != obj.name)) {
+            if(layer.name && (removeOld || (obj && layer.name != obj.name))) {
                 named[layer.name] = null;
                 layer.name = null;
             }
@@ -268,7 +268,7 @@
                                 this.state = to;
                                 var handler = event && button_data.mouse[event];
                                 if(handler)
-                                    handler(rt.mkGlobalScope(), rt.mkLocalScope(movieClip));
+                                    handler(rt.mkGlobalScope(), rt.mkLocalScope(mkMovieClip()));
                             },
                         };
                         button.attachListeners();
@@ -287,7 +287,8 @@
                 }
                 if(layer.name != obj.name) {
                     layer.name = obj.name;
-                    named[layer.name] = depth;
+                    if(layer.name)
+                        named[layer.name] = depth;
                 }
             }
 
@@ -305,7 +306,7 @@
 
         var action = this.actions[frame];
         if(action)
-            action(rt.mkGlobalScope(), rt.mkLocalScope(movieClip));
+            action(rt.mkGlobalScope(), rt.mkLocalScope(mkMovieClip()));
 
         // HACK(eddyb) no idea what the interaction here should be.
         if(!this.paused)
