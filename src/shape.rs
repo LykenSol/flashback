@@ -192,7 +192,7 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
             stroke: def.shape.line_styles.iter().map(StyledPath::new).collect(),
         };
 
-        let mut pos = None;
+        let mut pos = Point::default();
         let mut styles = Styles::default();
 
         let mut path = vec![];
@@ -228,7 +228,7 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
                     }
 
                     if let Some(move_to) = change.move_to.as_ref().map(Point::from) {
-                        pos = Some(move_to);
+                        pos = move_to;
                     }
                     if let Some(left_fill) = change.left_fill {
                         styles.fill0.set_from_swf(left_fill);
@@ -257,10 +257,9 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
                 }
             };
 
-            let pos = pos.as_mut().expect("Shape::from: missing `move_to`");
-            let line = line.map_points(|p| *pos + p);
+            let line = line.map_points(|p| pos + p);
             path.push(line);
-            *pos = line.to;
+            pos = line.to;
         }
 
         shape.add_path(&path, styles);
