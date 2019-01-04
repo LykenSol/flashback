@@ -117,6 +117,7 @@
     }
     Timeline.prototype.paused = false;
     Timeline.prototype.frame = 0;
+    Timeline.prototype.renderedFrame = -1;
     Timeline.prototype.attachLayers = function() {
         var container = this.container;
         this.layers.forEach(function(layer) {
@@ -129,7 +130,7 @@
         });
     };
     Timeline.prototype.showFrame = function() {
-        if(this.paused) {
+        if(this.paused && this.renderedFrame == this.frame) {
             // Update sprites even when paused.
             this.layers.forEach(function(layer) {
                 if(layer.sprite)
@@ -139,13 +140,20 @@
         }
 
         var frame = this.frame;
+        var renderedFrame = this.renderedFrame;
         var named = this.named;
         var id_prefix = this.id_prefix;
-        this.layers.forEach(function(layer, depth) {
-            var obj = layer.frames[frame];
 
-            // Fully remove objects from the previous cycle.
-            if(!obj && frame == 0)
+        if(renderedFrame > frame)
+            renderedFrame = -1;
+
+        this.layers.forEach(function(layer, depth) {
+            var obj, i;
+            for(var i = frame; i > renderedFrame && !obj && obj !== null; i--)
+                obj = layer.frames[i];
+
+            // Fully remove anything not present yet.
+            if(i == -1)
                 obj = null;
 
             // TODO(eddyb) this might need to take SWF's `is_move` into account.
@@ -209,6 +217,8 @@
             if(layer.sprite)
                 layer.sprite.showFrame();
         });
+
+        this.renderedFrame = frame;
 
         var action = this.actions[frame];
         if(action)
