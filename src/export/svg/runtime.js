@@ -52,6 +52,7 @@
             timeline.frame = frame;
             timeline.paused = false;
         });
+        def_get('_root', rt.mkMovieClip.bind(null, timeline.root));
         if(timeline.parent)
             def_get('_parent', rt.mkMovieClip.bind(null, timeline.parent));
         for(var name in timeline.named) {
@@ -93,6 +94,7 @@
                 feColorMatrix: feColorMatrix,
             };
         });
+        this.root = this;
         this.container = container;
         this.id_prefix = id_prefix;
         this.attachLayers();
@@ -138,6 +140,7 @@
                 if(layer.sprite) {
                     layer.sprite.detachLayers();
                     layer.sprite.parent = null;
+                    layer.sprite.root = null;
                     layer.sprite = null;
                 }
             }
@@ -161,6 +164,7 @@
                             id_prefix + 'd_' + depth + '_',
                         );
                         layer.sprite.parent = this;
+                        layer.sprite.root = this.root;
                     }
                 }
                 if(obj.matrix) {
