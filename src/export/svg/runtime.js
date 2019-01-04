@@ -52,6 +52,12 @@
             timeline.frame = frame;
             timeline.paused = false;
         });
+        def('getBytesLoaded', function() {
+            return 1;
+        });
+        def('getBytesTotal', function() {
+            return 1;
+        });
         def_get('_root', rt.mkMovieClip.bind(null, timeline.root));
         if(timeline.parent)
             def_get('_parent', rt.mkMovieClip.bind(null, timeline.parent));
