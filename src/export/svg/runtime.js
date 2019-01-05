@@ -306,9 +306,23 @@
         });
 
         if(renderedFrame == -1) {
-            this.activeSounds.forEach(function(sound) {
-                sound.userTimeline = null;
-                sound.pause();
+            var activeSounds = this.activeSounds;
+
+            // Remove sounds that start right away from the
+            // active set, to avoid them getting stopped.
+            var play_sounds_at_start = this.sounds[0];
+            if(play_sounds_at_start)
+                play_sounds_at_start.forEach(function(sound) {
+                    activeSounds[sound.character] = null;
+                });
+            if(this.sound_stream && this.sound_stream.start == 0)
+                activeSounds[0] = null;
+
+            activeSounds.forEach(function(sound) {
+                if(sound) {
+                    sound.userTimeline = null;
+                    sound.pause();
+                }
             });
             this.activeSounds = [];
         }
@@ -316,28 +330,43 @@
         for(var i = renderedFrame + 1; i <= frame; i++) {
             var timeline = this;
 
-            function playSound(id, sound) {
+            var play_sounds = this.sounds[i];
+            if(play_sounds)
+                play_sounds.forEach(function(sound) {
+                    sounds[sound.character].userTimeline = timeline;
+                });
+            if(this.sound_stream && this.sound_stream.start == i)
+                this.sound_stream.sound.userTimeline = timeline;
+        }
+
+        for(var i = renderedFrame + 1; i <= frame; i++) {
+            var timeline = this;
+
+            function playSound(sound_data, sound) {
                 if(sound.userTimeline && sound.userTimeline != timeline)
                     return console.error('sound already in use by', sound.userTimeline);
-                sound.userTimeline = timeline;
-                // FIXME(eddyb) couple this with `requestAnimationFrame`
-                // (currently calling `showFrame` in a loop doesn't do the right thing).
-                sound.currentTime = (frame - i) / frame_rate;
+                sound.loop = !!sound_data.loops;
+                if(!(sound_data.no_restart && sound.userTimeline == timeline)) {
+                    // FIXME(eddyb) couple this with `requestAnimationFrame`
+                    // (currently calling `showFrame` in a loop doesn't do the right thing).
+                    sound.currentTime = (frame - i) / frame_rate;
+                }
                 var promise = sound.play();
                 if(promise && promise.catch)
                     promise.catch(function(e) {
                         console.error('failed to play sound: '+e.toString());
                     });
-                timeline.activeSounds[id] = sound;
+                sound.userTimeline = timeline;
+                timeline.activeSounds[sound_data.character] = sound;
             }
 
             var play_sounds = this.sounds[i];
             if(play_sounds)
-                play_sounds.forEach(function(id) {
-                    playSound(id, sounds[id]);
+                play_sounds.forEach(function(sound) {
+                    playSound(sound, sounds[sound.character]);
                 });
             if(this.sound_stream && this.sound_stream.start == i)
-                playSound(0, this.sound_stream.sound);
+                playSound({ character: 0 }, this.sound_stream.sound);
         }
 
         this.renderedFrame = frame;

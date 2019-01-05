@@ -157,7 +157,13 @@ pub fn export(timeline: &Timeline) -> js::Code {
                 .unwrap_or(Frame(0));
             js::array((0..=last_frame.0).map(Frame).map(
                 |frame| match timeline.sounds.get(&frame) {
-                    Some(sounds) => js::array(sounds.iter().map(|id| js::code! { id.0 })),
+                    Some(sounds) => js::array(sounds.iter().map(|sound| {
+                        js::object(vec![
+                            ("character", js::code! { sound.character.0 }),
+                            ("no_restart", js::code! { sound.no_restart }),
+                            ("loops", js::code! { sound.loops }),
+                        ])
+                    })),
                     None => js::code! {},
                 },
             ))

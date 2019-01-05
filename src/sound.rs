@@ -94,8 +94,11 @@ impl<'a> DefineSound<'a> {
     }
 }
 
+#[derive(Debug)]
 pub struct StartSound {
-    pub id: CharacterId,
+    pub character: CharacterId,
+    pub no_restart: bool,
+    pub loops: bool,
 }
 
 // HACK(eddyb) move this into swf-{tree,parser}.
@@ -105,13 +108,23 @@ impl StartSound {
             return None;
         }
 
-        let id = CharacterId(u16::from_le_bytes([tag.data[0], tag.data[1]]));
+        let character = CharacterId(u16::from_le_bytes([tag.data[0], tag.data[1]]));
         let flags = tag.data[2];
-        if flags != 0 {
-            eprintln!("StartSound::try_parse: unsupported SoundInfo: {:?}", &tag.data[2..]);
+        if (flags & !0x10) != 0 {
+            eprintln!(
+                "StartSound::try_parse: unsupported SoundInfo: {:?}",
+                &tag.data[2..]
+            );
         }
 
-        Some(StartSound { id })
+        let no_restart = (flags & 0x10) != 0;
+        let loops = (flags & 4) != 0;
+
+        Some(StartSound {
+            character,
+            no_restart,
+            loops,
+        })
     }
 }
 

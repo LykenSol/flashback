@@ -163,7 +163,7 @@ pub struct Timeline<'a> {
     pub layers: BTreeMap<Depth, Layer<'a>>,
     pub actions: BTreeMap<Frame, Vec<avm1::Code<'a>>>,
     pub labels: BTreeMap<&'a str, Frame>,
-    pub sounds: BTreeMap<Frame, Vec<CharacterId>>,
+    pub sounds: BTreeMap<Frame, Vec<sound::StartSound>>,
     pub sound_stream: Option<SoundStream>,
     pub frame_count: Frame,
 }
@@ -256,7 +256,7 @@ impl<'a> TimelineBuilder<'a> {
             .sounds
             .entry(self.current_frame)
             .or_default()
-            .push(sound.id);
+            .push(sound);
     }
 
     pub fn sound_stream_head(&mut self, _head: sound::SoundStreamHead) {
