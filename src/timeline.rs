@@ -151,12 +151,20 @@ impl<'a> FrameLabel<'a> {
     }
 }
 
+#[derive(Debug)]
+pub struct SoundStream {
+    pub start: Frame,
+    // FIXME(eddyb) support multiple formats.
+    pub mp3: Vec<u8>,
+}
+
 #[derive(Default, Debug)]
 pub struct Timeline<'a> {
     pub layers: BTreeMap<Depth, Layer<'a>>,
     pub actions: BTreeMap<Frame, Vec<avm1::Code<'a>>>,
     pub labels: BTreeMap<&'a str, Frame>,
     pub sounds: BTreeMap<Frame, Vec<CharacterId>>,
+    pub sound_stream: Option<SoundStream>,
     pub frame_count: Frame,
 }
 
@@ -249,6 +257,26 @@ impl<'a> TimelineBuilder<'a> {
             .entry(self.current_frame)
             .or_default()
             .push(sound.id);
+    }
+
+    pub fn sound_stream_head(&mut self, _head: sound::SoundStreamHead) {
+        assert!(self.timeline.sound_stream.is_none());
+        self.timeline.sound_stream = Some(SoundStream {
+            start: self.current_frame,
+            mp3: vec![],
+        });
+    }
+
+    pub fn sound_stream_block(&mut self, block: sound::SoundStreamBlock) {
+        match &mut self.timeline.sound_stream {
+            Some(stream) => stream.mp3.extend(block.as_mp3().mp3.data),
+            None => {
+                eprintln!(
+                    "TimelineBuilder::sound_stream_block: unsupported {:?}",
+                    block,
+                );
+            }
+        }
     }
 
     pub fn advance_frame(&mut self) {

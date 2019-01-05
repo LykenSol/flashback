@@ -56,6 +56,10 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
                                 timeline_builder.frame_label(label)
                             } else if let Some(sound) = sound::StartSound::try_parse(tag) {
                                 timeline_builder.start_sound(sound);
+                            } else if let Some(head) = sound::SoundStreamHead::try_parse(tag) {
+                                timeline_builder.sound_stream_head(head);
+                            } else if let Some(block) = sound::SoundStreamBlock::try_parse(tag) {
+                                timeline_builder.sound_stream_block(block);
                             } else {
                                 eprintln!("unknown sprite tag: {:?}", tag);
                             }
@@ -84,6 +88,10 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
                     timeline_builder.frame_label(label);
                 } else if let Some(sound) = sound::StartSound::try_parse(tag) {
                     timeline_builder.start_sound(sound);
+                } else if let Some(head) = sound::SoundStreamHead::try_parse(tag) {
+                    timeline_builder.sound_stream_head(head);
+                } else if let Some(block) = sound::SoundStreamBlock::try_parse(tag) {
+                    timeline_builder.sound_stream_block(block);
                 } else {
                     eprintln!("unknown tag: {:?}", tag);
                 }
@@ -343,11 +351,9 @@ impl Context {
             }
 
             Character::Sound(sound) => {
-                let mut data_url = "data:audio/mpeg;base64,".to_string();
-                base64::encode_config_buf(sound.mp3_data, base64::STANDARD, &mut data_url);
                 if self.config.use_js {
                     self.js_defs += js::code! {
-                        "sounds[", id.0, "] = new Audio('", data_url, "');\n"
+                        "sounds[", id.0, "] = ", js::sound::export_mp3(sound.mp3.data), ";\n"
                     };
                     return;
                 }

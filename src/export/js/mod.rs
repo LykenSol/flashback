@@ -2,6 +2,7 @@ use std::fmt;
 use std::ops::AddAssign;
 
 pub mod avm1;
+pub mod sound;
 pub mod timeline;
 
 pub use crate::__mod_hack__js_code as code;

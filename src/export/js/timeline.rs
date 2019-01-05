@@ -162,6 +162,16 @@ pub fn export(timeline: &Timeline) -> js::Code {
                 },
             ))
         }),
+        (
+            "sound_stream",
+            match &timeline.sound_stream {
+                Some(stream) => js::object(vec![
+                    ("start", js::code! { stream.start.0 }),
+                    ("sound", js::sound::export_mp3(&stream.mp3)),
+                ]),
+                None => js::code! { "null" },
+            },
+        ),
         ("frame_count", js::code! { timeline.frame_count.0 }),
     ])
 }

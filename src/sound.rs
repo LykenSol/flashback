@@ -1,20 +1,60 @@
 use crate::dictionary::CharacterId;
 use swf_tree as swf;
 
+pub struct Mp3<'a> {
+    pub seek_samples: u16,
+    pub data: &'a [u8],
+}
+
+impl<'a> Mp3<'a> {
+    fn parse(mut data: &'a [u8]) -> Self {
+        // FIXME(eddyb) process all the mp3 frames correctly.
+        let seek_samples = u16::from_le_bytes([data[0], data[1]]);
+        data = &data[2..];
+        Mp3 { seek_samples, data }
+    }
+}
+
+pub struct Mp3StreamBlock<'a> {
+    pub samples: u16,
+    pub mp3: Mp3<'a>,
+}
+
+impl<'a> Mp3StreamBlock<'a> {
+    fn parse(mut data: &'a [u8]) -> Self {
+        let samples = u16::from_le_bytes([data[0], data[1]]);
+        data = &data[2..];
+        Mp3StreamBlock {
+            samples,
+            mp3: Mp3::parse(data),
+        }
+    }
+}
+
 pub struct Sound<'a> {
     /// How many times smaller than 44.1kHz is the sample rate?
     pub sample_rate_divider: u8,
     pub stereo: bool,
     pub samples: u32,
 
-    pub mp3_seek_samples: u16,
-    pub mp3_data: &'a [u8],
+    pub mp3: Mp3<'a>,
 }
 
 pub struct DefineSound<'a> {
     pub id: CharacterId,
     pub sound: Sound<'a>,
 }
+
+const FORMATS: &[&str] = &[
+    "uncompressed, native-endian",
+    "adpcm",
+    "mp3",
+    "uncompressed, little-endian",
+    "nellymoser @ 16 kHz",
+    "nellymoser @ 8 kHz",
+    "nellymoser",
+    "speex",
+];
 
 // HACK(eddyb) move this into swf-{tree,parser}.
 impl<'a> DefineSound<'a> {
@@ -31,31 +71,15 @@ impl<'a> DefineSound<'a> {
         let format = flags >> 4;
         if format != 2 {
             eprintln!(
-                "unsupported format: {} ({})",
+                "DefineSound::try_parse: unsupported format: {} ({})",
                 format,
-                [
-                    "uncompressed, native-endian",
-                    "adpcm",
-                    "mp3",
-                    "uncompressed, little-endian",
-                    "nellymoser @ 16 kHz",
-                    "nellymoser @ 8 kHz",
-                    "nellymoser",
-                    "speex",
-                ]
-                .get(format as usize)
-                .cloned()
-                .unwrap_or("")
+                FORMATS.get(format as usize).cloned().unwrap_or("")
             );
             return None;
         }
-        let mut mp3_data = data;
 
         let sample_rate_divider = 1 << (3 - ((flags >> 2) & 3));
         let stereo = (flags & 1) != 0;
-
-        let mp3_seek_samples = u16::from_le_bytes([mp3_data[0], mp3_data[1]]);
-        mp3_data = &mp3_data[2..];
 
         Some(DefineSound {
             id,
@@ -64,8 +88,7 @@ impl<'a> DefineSound<'a> {
                 stereo,
                 samples,
 
-                mp3_seek_samples,
-                mp3_data,
+                mp3: Mp3::parse(data),
             },
         })
     }
@@ -89,5 +112,52 @@ impl StartSound {
         }
 
         Some(StartSound { id })
+    }
+}
+
+pub struct SoundStreamHead {
+    pub average_samples: u16,
+}
+
+// HACK(eddyb) move this into swf-{tree,parser}.
+impl SoundStreamHead {
+    pub fn try_parse(tag: &swf::tags::Unknown) -> Option<Self> {
+        if tag.code != 18 {
+            return None;
+        }
+
+        let flags = tag.data[1];
+        let average_samples = u16::from_le_bytes([tag.data[2], tag.data[3]]);
+
+        let format = flags >> 4;
+        if format != 2 {
+            eprintln!(
+                "SoundStreamHead::try_parse: unsupported format: {} ({})",
+                format,
+                FORMATS.get(format as usize).cloned().unwrap_or("")
+            );
+            return None;
+        }
+
+        Some(SoundStreamHead { average_samples })
+    }
+}
+
+#[derive(Debug)]
+pub struct SoundStreamBlock<'a> {
+    data: &'a [u8],
+}
+
+// HACK(eddyb) move this into swf-{tree,parser}.
+impl<'a> SoundStreamBlock<'a> {
+    pub fn try_parse(tag: &'a swf::tags::Unknown) -> Option<Self> {
+        if tag.code != 19 {
+            return None;
+        }
+        Some(SoundStreamBlock { data: &tag.data })
+    }
+
+    pub fn as_mp3(&self) -> Mp3StreamBlock<'a> {
+        Mp3StreamBlock::parse(self.data)
     }
 }

@@ -91,6 +91,7 @@
         this.actions = data.actions;
         this.labels = data.labels;
         this.sounds = data.sounds;
+        this.sound_stream = data.sound_stream;
         this.activeSounds = [];
         this.layers = data.layers.map(function(frames, depth) {
             var container = svg_element('g');
@@ -314,23 +315,29 @@
 
         for(var i = renderedFrame + 1; i <= frame; i++) {
             var timeline = this;
+
+            function playSound(id, sound) {
+                if(sound.userTimeline && sound.userTimeline != timeline)
+                    return console.error('sound already in use by', sound.userTimeline);
+                sound.userTimeline = timeline;
+                // FIXME(eddyb) couple this with `requestAnimationFrame`
+                // (currently calling `showFrame` in a loop doesn't do the right thing).
+                sound.currentTime = (frame - i) / frame_rate;
+                var promise = sound.play();
+                if(promise && promise.catch)
+                    promise.catch(function(e) {
+                        console.error('failed to play sound: '+e.toString());
+                    });
+                timeline.activeSounds[id] = sound;
+            }
+
             var play_sounds = this.sounds[i];
             if(play_sounds)
                 play_sounds.forEach(function(id) {
-                    var sound = sounds[id];
-                    if(sound.userTimeline && sound.userTimeline != timeline)
-                        return console.error('sound already in use by', sound.userTimeline);
-                    sound.userTimeline = timeline;
-                    // FIXME(eddyb) couple this with `requestAnimationFrame`
-                    // (currently calling `showFrame` in a loop doesn't do the right thing).
-                    sound.currentTime = (frame - i) / frame_rate;
-                    var promise = sound.play();
-                    if(promise && promise.catch)
-                        promise.catch(function(e) {
-                            console.error('failed to play sound: '+e.toString());
-                        });
-                    timeline.activeSounds[id] = sound;
+                    playSound(id, sounds[id]);
                 });
+            if(this.sound_stream && this.sound_stream.start == i)
+                playSound(0, this.sound_stream.sound);
         }
 
         this.renderedFrame = frame;
@@ -361,7 +368,10 @@
 
     // HACK(eddyb) work around unreasonable autoplay policies in Chrome.
     // See https://goo.gl/xX8pDD for their one-sided description of it.
-    if(sounds.some(function(x) { return x; })) {
+    var anySounds = timeline.sound_stream ||
+        sprites.some(function(x) { return x.sound_stream; }) ||
+        sounds.some(function(x) { return x; });
+    if(anySounds) {
         var viewBox = document.rootElement.getAttribute('viewBox')
             .split(' ')
             .map(function(x) { return +x; });
