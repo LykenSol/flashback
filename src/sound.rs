@@ -108,7 +108,7 @@ impl StartSound {
         let id = CharacterId(u16::from_le_bytes([tag.data[0], tag.data[1]]));
         let flags = tag.data[2];
         if flags != 0 {
-            return None;
+            eprintln!("StartSound::try_parse: unsupported SoundInfo: {:?}", &tag.data[2..]);
         }
 
         Some(StartSound { id })
