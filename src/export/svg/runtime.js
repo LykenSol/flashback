@@ -90,6 +90,8 @@
         this.named = Object.create(null);
         this.actions = data.actions;
         this.labels = data.labels;
+        this.sounds = data.sounds;
+        this.activeSounds = [];
         this.layers = data.layers.map(function(frames, depth) {
             var container = svg_element('g');
             var use = svg_element('use');
@@ -302,6 +304,35 @@
             layer.updateUseHref();
         });
 
+        if(renderedFrame == -1) {
+            this.activeSounds.forEach(function(sound) {
+                sound.userTimeline = null;
+                sound.pause();
+            });
+            this.activeSounds = [];
+        }
+
+        for(var i = renderedFrame + 1; i <= frame; i++) {
+            var timeline = this;
+            var play_sounds = this.sounds[i];
+            if(play_sounds)
+                play_sounds.forEach(function(id) {
+                    var sound = sounds[id];
+                    if(sound.userTimeline && sound.userTimeline != timeline)
+                        return console.error('sound already in use by', sound.userTimeline);
+                    sound.userTimeline = timeline;
+                    // FIXME(eddyb) couple this with `requestAnimationFrame`
+                    // (currently calling `showFrame` in a loop doesn't do the right thing).
+                    sound.currentTime = (frame - i) / frame_rate;
+                    var promise = sound.play();
+                    if(promise && promise.catch)
+                        promise.catch(function(e) {
+                            console.error('failed to play sound: '+e.toString());
+                        });
+                    timeline.activeSounds[id] = sound;
+                });
+        }
+
         this.renderedFrame = frame;
 
         var action = this.actions[frame];
@@ -327,5 +358,35 @@
         for(; last_frame < frame; last_frame++)
             timeline.showFrame();
     }
-    window.requestAnimationFrame(update);
+
+    // HACK(eddyb) work around unreasonable autoplay policies in Chrome.
+    // See https://goo.gl/xX8pDD for their one-sided description of it.
+    if(sounds.some(function(x) { return x; })) {
+        var viewBox = document.rootElement.getAttribute('viewBox')
+            .split(' ')
+            .map(function(x) { return +x; });
+
+        var bgRect = document.getElementById('bg');
+        var bgOriginalFill = bgRect.getAttribute('fill');
+        bgRect.setAttribute('fill', 'white');
+
+        var playButton = svg_element('path');
+        var x = viewBox[0] + viewBox[2] / 2;
+        var y = viewBox[1] + viewBox[3] / 2;
+        var size = Math.min(viewBox[2], viewBox[3]) / 2;
+        var x0 = x - size / 3;
+        var x1 = x + size / 3 * 2;
+        var y0 = y - size / 2;
+        var y1 = y + size / 2;
+        playButton.setAttribute('d', 'M'+x1+','+y+' L'+x0+','+y0+' L'+x0+','+y1+' Z');
+        playButton.setAttribute('fill', 'black');
+        playButton.style.cursor = 'pointer';
+        playButton.addEventListener('click', function() {
+            playButton.remove();
+            bgRect.setAttribute('fill', bgOriginalFill);
+            window.requestAnimationFrame(update);
+        });
+        timeline.container.appendChild(playButton);
+    } else
+        window.requestAnimationFrame(update);
 })()

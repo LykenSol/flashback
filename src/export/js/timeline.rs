@@ -147,6 +147,21 @@ pub fn export(timeline: &Timeline) -> js::Code {
                     .map(|(name, frame)| (js::string(name), js::code! { frame.0 })),
             ),
         ),
+        ("sounds", {
+            let last_frame = timeline
+                .sounds
+                .keys()
+                .cloned()
+                .rev()
+                .next()
+                .unwrap_or(Frame(0));
+            js::array((0..=last_frame.0).map(Frame).map(
+                |frame| match timeline.sounds.get(&frame) {
+                    Some(sounds) => js::array(sounds.iter().map(|id| js::code! { id.0 })),
+                    None => js::code! {},
+                },
+            ))
+        }),
         ("frame_count", js::code! { timeline.frame_count.0 }),
     ])
 }

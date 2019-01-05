@@ -3,6 +3,7 @@ use crate::button;
 use crate::dictionary::{Character, CharacterId, Dictionary};
 use crate::export::js;
 use crate::shape::{Line, Shape};
+use crate::sound;
 use crate::timeline::{self, Frame, Timeline, TimelineBuilder};
 use image::GenericImageView;
 use std::collections::BTreeMap;
@@ -53,6 +54,8 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
                         swf::Tag::Unknown(tag) => {
                             if let Some(label) = timeline::FrameLabel::try_parse(tag) {
                                 timeline_builder.frame_label(label)
+                            } else if let Some(sound) = sound::StartSound::try_parse(tag) {
+                                timeline_builder.start_sound(sound);
                             } else {
                                 eprintln!("unknown sprite tag: {:?}", tag);
                             }
@@ -73,10 +76,14 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
             swf::Tag::Unknown(tag) => {
                 if let Some(def) = bitmap::DefineBitmap::try_parse(tag) {
                     dictionary.define(def.id, Character::Bitmap(def.image));
+                } else if let Some(def) = sound::DefineSound::try_parse(tag) {
+                    dictionary.define(def.id, Character::Sound(def.sound));
                 } else if let Some(def) = button::DefineButton::try_parse(tag) {
                     dictionary.define(def.id, Character::Button(def.button));
                 } else if let Some(label) = timeline::FrameLabel::try_parse(tag) {
-                    timeline_builder.frame_label(label)
+                    timeline_builder.frame_label(label);
+                } else if let Some(sound) = sound::StartSound::try_parse(tag) {
+                    timeline_builder.start_sound(sound);
                 } else {
                     eprintln!("unknown tag: {:?}", tag);
                 }
@@ -110,6 +117,7 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
         .set("style", "background: black")
         .add(
             Rectangle::new()
+                .set("id", "bg")
                 .set("width", "100%")
                 .set("height", "100%")
                 .set("fill", format!("#{:02x}{:02x}{:02x}", bg[0], bg[1], bg[2])),
@@ -141,6 +149,7 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
             .add(
                 js::code! {
                     "var timeline = ", js::timeline::export(&timeline), ";\n",
+                    "var sounds = [];\n",
                     "var sprites = [];\n",
                     "var buttons = [];\n",
                     cx.js_defs,
@@ -331,6 +340,19 @@ impl Context {
                                 .set("height", image.height() * 20),
                         ),
                 );
+            }
+
+            Character::Sound(sound) => {
+                let mut data_url = "data:audio/mpeg;base64,".to_string();
+                base64::encode_config_buf(sound.mp3_data, base64::STANDARD, &mut data_url);
+                if self.config.use_js {
+                    self.js_defs += js::code! {
+                        "sounds[", id.0, "] = new Audio('", data_url, "');\n"
+                    };
+                    return;
+                }
+
+                // TODO(eddyb) try to make this work for animated SVGs as well.
             }
 
             // TODO(eddyb) figure out if there's anything to be done here

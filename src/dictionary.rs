@@ -1,5 +1,6 @@
 use crate::button::Button;
 use crate::shape::Shape;
+use crate::sound::Sound;
 use crate::timeline::Timeline;
 use image::DynamicImage;
 use std::collections::BTreeMap;
@@ -11,6 +12,8 @@ pub struct CharacterId(pub u16);
 pub enum Character<'a> {
     Shape(Shape<'a>),
     Bitmap(DynamicImage),
+    Sound(Sound<'a>),
+
     Sprite(Timeline<'a>),
     Button(Button),
     DynamicText(&'a swf::tags::DefineDynamicText),

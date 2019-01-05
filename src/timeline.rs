@@ -1,5 +1,6 @@
 use crate::avm1;
 use crate::dictionary::CharacterId;
+use crate::sound;
 use std::collections::BTreeMap;
 use std::ops::Add;
 use std::str;
@@ -155,6 +156,7 @@ pub struct Timeline<'a> {
     pub layers: BTreeMap<Depth, Layer<'a>>,
     pub actions: BTreeMap<Frame, Vec<avm1::Code<'a>>>,
     pub labels: BTreeMap<&'a str, Frame>,
+    pub sounds: BTreeMap<Frame, Vec<CharacterId>>,
     pub frame_count: Frame,
 }
 
@@ -239,6 +241,14 @@ impl<'a> TimelineBuilder<'a> {
 
     pub fn frame_label(&mut self, label: FrameLabel<'a>) {
         self.timeline.labels.insert(label.name, self.current_frame);
+    }
+
+    pub fn start_sound(&mut self, sound: sound::StartSound) {
+        self.timeline
+            .sounds
+            .entry(self.current_frame)
+            .or_default()
+            .push(sound.id);
     }
 
     pub fn advance_frame(&mut self) {
