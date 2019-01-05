@@ -381,7 +381,18 @@
         playButton.setAttribute('d', 'M'+x1+','+y+' L'+x0+','+y0+' L'+x0+','+y1+' Z');
         playButton.setAttribute('fill', 'black');
         playButton.style.cursor = 'pointer';
+        var clicked = false;
         playButton.addEventListener('click', function() {
+            if(clicked)
+                return;
+            clicked = true;
+
+            // HACK(eddyb) Safari is even worse, requires playing some media
+            // as a result of a user interaction to enable "autoplay" later.
+            // So this is one sample of silence, in the WAV format.
+            var silence_wav = 'UklGRiYAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQIAAAAAAA==';
+            (new Audio('data:audio/x-wav;base64,'+silence_wav)).play();
+
             playButton.remove();
             bgRect.setAttribute('fill', bgOriginalFill);
             window.requestAnimationFrame(update);
