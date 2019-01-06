@@ -5,3 +5,4 @@ Cargo.lock
 # HACK(eddyb) to facilitate testing
 *.swf
 *.svg
+*.svgz
