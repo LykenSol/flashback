@@ -399,12 +399,11 @@
     // See https://goo.gl/xX8pDD for their one-sided description of it.
     var anySounds = false;
     function forEachSound(f) {
-        function maybe(sound) { sound && f(sound); }
-        maybe(timeline.sound_stream);
+        timeline.sound_stream && f(timeline.sound_stream.sound);
         sprites.forEach(function(sprite) {
-            maybe(sprite.sound_stream);
+            sprite.sound_stream && f(sprite.sound_stream.sound);
         });
-        sounds.forEach(maybe);
+        sounds.forEach(f);
     }
     forEachSound(function() { anySounds = true; })
     if(anySounds) {
