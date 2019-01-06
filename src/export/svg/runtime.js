@@ -397,9 +397,16 @@
 
     // HACK(eddyb) work around unreasonable autoplay policies in Chrome.
     // See https://goo.gl/xX8pDD for their one-sided description of it.
-    var anySounds = timeline.sound_stream ||
-        sprites.some(function(x) { return x.sound_stream; }) ||
-        sounds.some(function(x) { return x; });
+    var anySounds = false;
+    function forEachSound(f) {
+        function maybe(sound) { sound && f(sound); }
+        maybe(timeline.sound_stream);
+        sprites.forEach(function(sprite) {
+            maybe(sprite.sound_stream);
+        });
+        sounds.forEach(maybe);
+    }
+    forEachSound(function() { anySounds = true; })
     if(anySounds) {
         var viewBox = document.rootElement.getAttribute('viewBox')
             .split(' ')
@@ -426,11 +433,9 @@
                 return;
             clicked = true;
 
-            // HACK(eddyb) Safari is even worse, requires playing some media
+            // HACK(eddyb) Safari is even worse, requires loading media
             // as a result of a user interaction to enable "autoplay" later.
-            // So this is one sample of silence, in the WAV format.
-            var silence_wav = 'UklGRiYAAABXQVZFZm10IBAAAAABAAEAESsAACJWAAACABAAZGF0YQIAAAAAAA==';
-            (new Audio('data:audio/x-wav;base64,'+silence_wav)).play();
+            forEachSound(function(sound) { sound.load(); });
 
             playButton.remove();
             bgRect.setAttribute('fill', bgOriginalFill);
