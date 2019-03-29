@@ -1,8 +1,8 @@
 use crate::avm1;
 use crate::export::js;
 
-impl<'a> avm1::Value<'a> {
-    fn to_js(self) -> js::Code {
+impl avm1::Value {
+    fn to_js(&self) -> js::Code {
         match self {
             avm1::Value::Undefined => js::code! { "undefined" },
             avm1::Value::Null => js::code! { "null" },
@@ -18,7 +18,7 @@ impl<'a> avm1::Value<'a> {
     }
 }
 
-pub fn export<'a, 'b: 'a>(codes: impl IntoIterator<Item = &'a avm1::Code<'b>>) -> js::Code {
+pub fn export<'a>(codes: impl IntoIterator<Item = &'a avm1::Code>) -> js::Code {
     let mut js_body = js::code! {};
 
     fn this_call(name: &str, args: impl IntoIterator<Item = js::Code>) -> js::Code {

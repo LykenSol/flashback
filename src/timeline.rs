@@ -20,19 +20,19 @@ impl Add for Frame {
 }
 
 // FIXME(eddyb) upstream these as methods on `swf-fixed` types.
-fn sfixed8p8_epsilons(x: &swf::fixed_point::Sfixed8P8) -> i16 {
+fn sfixed8p8_epsilons(x: &swf::fixed::Sfixed8P8) -> i16 {
     unsafe { std::mem::transmute_copy(x) }
 }
-fn sfixed16p16_epsilons(x: &swf::fixed_point::Sfixed16P16) -> i32 {
+fn sfixed16p16_epsilons(x: &swf::fixed::Sfixed16P16) -> i32 {
     unsafe { std::mem::transmute_copy(x) }
 }
 
 // FIXME(eddyb) upstream these as `#[derive(Copy, Clone)]`.
-fn copy_sfixed8p8(x: &swf::fixed_point::Sfixed8P8) -> swf::fixed_point::Sfixed8P8 {
-    swf::fixed_point::Sfixed8P8::from_epsilons(sfixed8p8_epsilons(x))
+fn copy_sfixed8p8(x: &swf::fixed::Sfixed8P8) -> swf::fixed::Sfixed8P8 {
+    swf::fixed::Sfixed8P8::from_epsilons(sfixed8p8_epsilons(x))
 }
-fn copy_sfixed16p16(x: &swf::fixed_point::Sfixed16P16) -> swf::fixed_point::Sfixed16P16 {
-    swf::fixed_point::Sfixed16P16::from_epsilons(sfixed16p16_epsilons(x))
+fn copy_sfixed16p16(x: &swf::fixed::Sfixed16P16) -> swf::fixed::Sfixed16P16 {
+    swf::fixed::Sfixed16P16::from_epsilons(sfixed16p16_epsilons(x))
 }
 
 fn copy_matrix(matrix: &swf::Matrix) -> swf::Matrix {
@@ -48,10 +48,10 @@ fn copy_matrix(matrix: &swf::Matrix) -> swf::Matrix {
 
 pub fn default_matrix() -> swf::Matrix {
     swf::Matrix {
-        scale_x: swf::fixed_point::Sfixed16P16::from_epsilons(1 << 16),
-        scale_y: swf::fixed_point::Sfixed16P16::from_epsilons(1 << 16),
-        rotate_skew0: swf::fixed_point::Sfixed16P16::from_epsilons(0),
-        rotate_skew1: swf::fixed_point::Sfixed16P16::from_epsilons(0),
+        scale_x: swf::fixed::Sfixed16P16::from_epsilons(1 << 16),
+        scale_y: swf::fixed::Sfixed16P16::from_epsilons(1 << 16),
+        rotate_skew0: swf::fixed::Sfixed16P16::from_epsilons(0),
+        rotate_skew1: swf::fixed::Sfixed16P16::from_epsilons(0),
         translate_x: 0,
         translate_y: 0,
     }
@@ -74,10 +74,10 @@ fn copy_color_transform(
 
 pub fn default_color_transform() -> swf::ColorTransformWithAlpha {
     swf::ColorTransformWithAlpha {
-        red_mult: swf::fixed_point::Sfixed8P8::from_epsilons(1 << 8),
-        green_mult: swf::fixed_point::Sfixed8P8::from_epsilons(1 << 8),
-        blue_mult: swf::fixed_point::Sfixed8P8::from_epsilons(1 << 8),
-        alpha_mult: swf::fixed_point::Sfixed8P8::from_epsilons(1 << 8),
+        red_mult: swf::fixed::Sfixed8P8::from_epsilons(1 << 8),
+        green_mult: swf::fixed::Sfixed8P8::from_epsilons(1 << 8),
+        blue_mult: swf::fixed::Sfixed8P8::from_epsilons(1 << 8),
+        alpha_mult: swf::fixed::Sfixed8P8::from_epsilons(1 << 8),
         red_add: 0,
         green_add: 0,
         blue_add: 0,
@@ -161,7 +161,7 @@ pub struct SoundStream {
 #[derive(Default, Debug)]
 pub struct Timeline<'a> {
     pub layers: BTreeMap<Depth, Layer<'a>>,
-    pub actions: BTreeMap<Frame, Vec<avm1::Code<'a>>>,
+    pub actions: BTreeMap<Frame, Vec<avm1::Code>>,
     pub labels: BTreeMap<&'a str, Frame>,
     pub sounds: BTreeMap<Frame, Vec<sound::StartSound>>,
     pub sound_stream: Option<SoundStream>,
@@ -199,7 +199,7 @@ impl<'a> TimelineBuilder<'a> {
             });
 
         if let Some(character) = place.character_id.map(CharacterId) {
-            if place.is_move {
+            if place.is_update {
                 *obj = Object::new(character);
             } else {
                 assert_eq!(obj.character, character);
@@ -240,11 +240,20 @@ impl<'a> TimelineBuilder<'a> {
     }
 
     pub fn do_action(&mut self, do_action: &'a swf::tags::DoAction) {
+        let mut data = &do_action.actions[..];
+        let mut actions = vec![];
+        while data[0] != 0 {
+            let (rest, action) = avm1_parser::parse_action(data).unwrap();
+            data = rest;
+            actions.push(action);
+        }
+        assert_eq!(data, [0]);
+
         self.timeline
             .actions
             .entry(self.current_frame)
             .or_default()
-            .push(avm1::Code::compile(&do_action.actions))
+            .push(avm1::Code::compile(actions))
     }
 
     pub fn frame_label(&mut self, label: FrameLabel<'a>) {

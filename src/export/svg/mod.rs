@@ -14,10 +14,10 @@ use svg::node::element::{
 use swf_tree as swf;
 
 // FIXME(eddyb) upstream these as methods on `swf-fixed` types.
-fn ufixed8p8_epsilons(x: &swf::fixed_point::Ufixed8P8) -> u16 {
+fn ufixed8p8_epsilons(x: &swf::fixed::Ufixed8P8) -> u16 {
     unsafe { std::mem::transmute_copy(x) }
 }
-fn ufixed8p8_to_f64(x: &swf::fixed_point::Ufixed8P8) -> f64 {
+fn ufixed8p8_to_f64(x: &swf::fixed::Ufixed8P8) -> f64 {
     ufixed8p8_epsilons(x) as f64 / (1 << 8) as f64
 }
 
@@ -52,6 +52,7 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
                         swf::Tag::DoAction(do_action) => timeline_builder.do_action(do_action),
                         swf::Tag::ShowFrame => timeline_builder.advance_frame(),
                         swf::Tag::Unknown(tag) => {
+                            // FIXME(eddyb) `swf-parser` now implements some of these, move over to that.
                             if let Some(label) = timeline::FrameLabel::try_parse(tag) {
                                 timeline_builder.frame_label(label)
                             } else if let Some(sound) = sound::StartSound::try_parse(tag) {
@@ -78,6 +79,7 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
             swf::Tag::DoAction(do_action) => timeline_builder.do_action(do_action),
             swf::Tag::ShowFrame => timeline_builder.advance_frame(),
             swf::Tag::Unknown(tag) => {
+                // FIXME(eddyb) `swf-parser` now implements some of these, move over to that.
                 if let Some(def) = bitmap::DefineBitmap::try_parse(tag) {
                     dictionary.define(def.id, Character::Bitmap(def.image));
                 } else if let Some(def) = sound::DefineSound::try_parse(tag) {
@@ -401,12 +403,6 @@ impl Context {
                         ]), ";\n"
                     };
 
-                    let handler_code: Vec<_> = button
-                        .handlers
-                        .iter()
-                        .map(|handler| crate::avm1::Code::compile(&handler.actions))
-                        .collect();
-
                     // Try to reuse functions as much as possible,
                     // while having only one function per `Event`.
                     // Note that this will still result in code
@@ -449,7 +445,7 @@ impl Context {
                         }
 
                         self.js_defs +=
-                            js::avm1::export(handlers.iter().map(|&i| &handler_code[i]));
+                            js::avm1::export(handlers.iter().map(|&i| &button.handlers[i].actions));
 
                         self.js_defs += js::code! { ";\n" };
                     }

@@ -1,7 +1,6 @@
 use crate::dictionary::CharacterId;
 use crate::timeline::{Depth, Object};
 use std::collections::BTreeMap;
-use swf_parser::parsers::avm1::parse_actions_string;
 use swf_parser::parsers::basic_data_types::{parse_color_transform_with_alpha, parse_matrix};
 use swf_tree as swf;
 
@@ -37,7 +36,7 @@ pub enum Event {
 #[derive(Debug)]
 pub struct EventHandler {
     pub on: Vec<Event>,
-    pub actions: Vec<swf::avm1::Action>,
+    pub actions: crate::avm1::Code,
 }
 
 pub struct Button {
@@ -139,11 +138,16 @@ impl DefineButton {
                 on.push(Event::KeyPress(key_code));
             }
 
-            let (rest, actions) = parse_actions_string(data).unwrap();
-            data = rest;
-
+            let mut actions = vec![];
+            while data[0] != 0 {
+                let (rest, action) = avm1_parser::parse_action(data).unwrap();
+                data = rest;
+                actions.push(action);
+            }
             assert_eq!(data[0], 0);
             data = &data[1..];
+
+            let actions = crate::avm1::Code::compile(actions);
 
             handlers.push(EventHandler { on, actions });
 

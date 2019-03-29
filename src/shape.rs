@@ -188,8 +188,20 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
                 x: (def.bounds.x_min as i32 + def.bounds.x_max as i32) / 2,
                 y: (def.bounds.y_min as i32 + def.bounds.y_max as i32) / 2,
             },
-            fill: def.shape.fill_styles.iter().map(StyledPath::new).collect(),
-            stroke: def.shape.line_styles.iter().map(StyledPath::new).collect(),
+            fill: def
+                .shape
+                .initial_styles
+                .fill
+                .iter()
+                .map(StyledPath::new)
+                .collect(),
+            stroke: def
+                .shape
+                .initial_styles
+                .line
+                .iter()
+                .map(StyledPath::new)
+                .collect(),
         };
 
         let mut pos = Point::default();
@@ -217,14 +229,16 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
 
                     // Process new style definitions first, so that
                     // style updates can refer to the new styles.
-                    if let Some(fill_styles) = &change.fill_styles {
+                    if let Some(new_styles) = &change.new_styles {
                         styles.fill0.start = shape.fill.len();
                         styles.fill1.start = shape.fill.len();
-                        shape.fill.extend(fill_styles.iter().map(StyledPath::new));
-                    }
-                    if let Some(line_styles) = &change.line_styles {
+                        shape
+                            .fill
+                            .extend(new_styles.fill.iter().map(StyledPath::new));
                         styles.stroke.start = shape.stroke.len();
-                        shape.stroke.extend(line_styles.iter().map(StyledPath::new));
+                        shape
+                            .stroke
+                            .extend(new_styles.line.iter().map(StyledPath::new));
                     }
 
                     if let Some(move_to) = change.move_to.as_ref().map(Point::from) {

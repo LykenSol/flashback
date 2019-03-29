@@ -7,9 +7,17 @@ fn main() {
     for arg in env::args().skip(1) {
         let path = PathBuf::from(arg);
         let data = fs::read(&path).unwrap();
-        match swf_parser::parsers::movie::parse_movie(&data[..]).to_full_result() {
-            Ok(movie) => {
-                eprintln!("{}:", path.display());
+        eprint!("{}:", path.display());
+        match swf_parser::parsers::movie::parse_movie(&data[..]) {
+            Ok((remaining, movie)) => {
+                if !remaining.is_empty() {
+                    eprintln!(
+                        "swf-parser parsing incomplete: {} bytes left",
+                        remaining.len()
+                    );
+                } else {
+                    eprintln!("");
+                }
                 // println!("{:#?}", movie);
                 let document = flashback::export::svg::export(
                     &movie,
@@ -21,7 +29,7 @@ fn main() {
                 svg::save(path.with_extension("svg"), &document).unwrap();
             }
             Err(e) => {
-                eprintln!("{}: swf-parser errored: {:?}", path.display(), e);
+                eprintln!("swf-parser errored: {:?}", e);
             }
         }
     }

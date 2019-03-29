@@ -7,16 +7,16 @@ use svg::Node;
 use swf_tree as swf;
 
 // FIXME(eddyb) upstream these as methods on `swf-fixed` types.
-fn sfixed8p8_epsilons(x: &swf::fixed_point::Sfixed8P8) -> i16 {
+fn sfixed8p8_epsilons(x: &swf::fixed::Sfixed8P8) -> i16 {
     unsafe { std::mem::transmute_copy(x) }
 }
-fn sfixed16p16_epsilons(x: &swf::fixed_point::Sfixed16P16) -> i32 {
+fn sfixed16p16_epsilons(x: &swf::fixed::Sfixed16P16) -> i32 {
     unsafe { std::mem::transmute_copy(x) }
 }
-fn sfixed8p8_to_f64(x: &swf::fixed_point::Sfixed8P8) -> f64 {
+fn sfixed8p8_to_f64(x: &swf::fixed::Sfixed8P8) -> f64 {
     sfixed8p8_epsilons(x) as f64 / (1 << 8) as f64
 }
-fn sfixed16p16_to_f64(x: &swf::fixed_point::Sfixed16P16) -> f64 {
+fn sfixed16p16_to_f64(x: &swf::fixed::Sfixed16P16) -> f64 {
     sfixed16p16_epsilons(x) as f64 / (1 << 16) as f64
 }
 
