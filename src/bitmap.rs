@@ -1,29 +1,35 @@
-use crate::dictionary::CharacterId;
 use image::{DynamicImage, Rgb, RgbImage, Rgba, RgbaImage};
 use swf_tree as swf;
 
-pub struct DefineBitmap {
-    pub id: CharacterId,
+pub struct Bitmap {
     pub image: DynamicImage,
 }
 
-// HACK(eddyb) move this into swf-{tree,parser}.
-impl DefineBitmap {
-    pub fn try_parse(tag: &swf::tags::Unknown) -> Option<Self> {
-        if tag.code != 20 && tag.code != 36 {
-            return None;
-        }
-        let has_alpha = tag.code == 36;
+impl<'a> From<&'a swf::tags::DefineBitmap> for Bitmap {
+    fn from(bitmap: &swf::tags::DefineBitmap) -> Self {
+        let has_alpha = match bitmap.media_type {
+            swf::ImageType::SwfBmp => false,
+            swf::ImageType::SwfAbmp => true,
+            _ => {
+                eprintln!("Bitmap::from: unsupported type: {:?}", bitmap.media_type);
 
-        let id = CharacterId(u16::from_le_bytes([tag.data[0], tag.data[1]]));
-        let format = tag.data[2];
-        let width = u16::from_le_bytes([tag.data[3], tag.data[4]]);
-        let height = u16::from_le_bytes([tag.data[5], tag.data[6]]);
+                return Bitmap {
+                    image: DynamicImage::ImageRgb8(RgbImage::new(
+                        bitmap.width as u32,
+                        bitmap.height as u32,
+                    )),
+                };
+            }
+        };
+
+        let format = bitmap.data[0];
+        let width = u16::from_le_bytes([bitmap.data[1], bitmap.data[2]]);
+        let height = u16::from_le_bytes([bitmap.data[3], bitmap.data[4]]);
 
         let (color_table_len, compressed_data) = if format == 3 {
-            (tag.data[7] as usize + 1, &tag.data[8..])
+            (bitmap.data[5] as usize + 1, &bitmap.data[6..])
         } else {
-            (0, &tag.data[7..])
+            (0, &bitmap.data[5..])
         };
 
         let data = inflate::inflate_bytes_zlib(compressed_data).unwrap();
@@ -71,8 +77,14 @@ impl DefineBitmap {
             4 => 2,
             5 => 4,
             _ => {
-                eprintln!("unsupported bitmap format {}", format);
-                return None;
+                eprintln!("Bitmap::from: unsupported bitmap format {}", format);
+
+                return Bitmap {
+                    image: DynamicImage::ImageRgb8(RgbImage::new(
+                        bitmap.width as u32,
+                        bitmap.height as u32,
+                    )),
+                };
             }
         };
         let row_len = (width as usize * px_bytes + 3) / 4 * 4;
@@ -89,6 +101,6 @@ impl DefineBitmap {
             }))
         };
 
-        Some(DefineBitmap { id, image })
+        Bitmap { image }
     }
 }

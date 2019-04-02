@@ -45,7 +45,7 @@ impl<'a> From<&'a swf::tags::DefineSound> for Sound<'a> {
         let mp3 = match sound.format {
             swf::AudioCodingFormat::Mp3 => Some(Mp3::parse(&sound.data)),
             _ => {
-                eprintln!("Sound::from: unsupported format: {:?}", sound.format,);
+                eprintln!("Sound::from: unsupported format: {:?}", sound.format);
                 None
             }
         };

@@ -94,7 +94,8 @@ pub fn main() -> Result<(), JsValue> {
             load_swf_from_hash(container.clone());
         }) as Box<dyn FnMut()>);
         let window_et: web_sys::EventTarget = window.into();
-        window_et.add_event_listener_with_callback("hashchange", closure.as_ref().unchecked_ref())?;
+        window_et
+            .add_event_listener_with_callback("hashchange", closure.as_ref().unchecked_ref())?;
         closure.forget();
     }
 
