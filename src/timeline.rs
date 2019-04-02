@@ -19,28 +19,12 @@ impl Add for Frame {
     }
 }
 
-// FIXME(eddyb) upstream these as methods on `swf-fixed` types.
-fn sfixed8p8_epsilons(x: &swf::fixed::Sfixed8P8) -> i16 {
-    unsafe { std::mem::transmute_copy(x) }
-}
-fn sfixed16p16_epsilons(x: &swf::fixed::Sfixed16P16) -> i32 {
-    unsafe { std::mem::transmute_copy(x) }
-}
-
-// FIXME(eddyb) upstream these as `#[derive(Copy, Clone)]`.
-fn copy_sfixed8p8(x: &swf::fixed::Sfixed8P8) -> swf::fixed::Sfixed8P8 {
-    swf::fixed::Sfixed8P8::from_epsilons(sfixed8p8_epsilons(x))
-}
-fn copy_sfixed16p16(x: &swf::fixed::Sfixed16P16) -> swf::fixed::Sfixed16P16 {
-    swf::fixed::Sfixed16P16::from_epsilons(sfixed16p16_epsilons(x))
-}
-
 fn copy_matrix(matrix: &swf::Matrix) -> swf::Matrix {
     swf::Matrix {
-        scale_x: copy_sfixed16p16(&matrix.scale_x),
-        scale_y: copy_sfixed16p16(&matrix.scale_y),
-        rotate_skew0: copy_sfixed16p16(&matrix.rotate_skew0),
-        rotate_skew1: copy_sfixed16p16(&matrix.rotate_skew1),
+        scale_x: matrix.scale_x,
+        scale_y: matrix.scale_y,
+        rotate_skew0: matrix.rotate_skew0,
+        rotate_skew1: matrix.rotate_skew1,
         translate_x: matrix.translate_x,
         translate_y: matrix.translate_y,
     }
@@ -61,10 +45,10 @@ fn copy_color_transform(
     color_transform: &swf::ColorTransformWithAlpha,
 ) -> swf::ColorTransformWithAlpha {
     swf::ColorTransformWithAlpha {
-        red_mult: copy_sfixed8p8(&color_transform.red_mult),
-        green_mult: copy_sfixed8p8(&color_transform.green_mult),
-        blue_mult: copy_sfixed8p8(&color_transform.blue_mult),
-        alpha_mult: copy_sfixed8p8(&color_transform.alpha_mult),
+        red_mult: color_transform.red_mult,
+        green_mult: color_transform.green_mult,
+        blue_mult: color_transform.blue_mult,
+        alpha_mult: color_transform.alpha_mult,
         red_add: color_transform.red_add,
         green_add: color_transform.green_add,
         blue_add: color_transform.blue_add,

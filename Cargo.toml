@@ -12,15 +12,12 @@ description = "Adobe Flash / SWF preservation tools."
 [dependencies]
 avm1-parser = "0.2.0"
 avm1-tree = "0.2.1"
-swf-parser = "0.0.8"
-swf-tree = "0.2.1"
+swf-parser = "0.3.0"
+swf-tree = "0.4.1"
 svg = "0.5.12"
 image = "0.20.1"
 inflate = "0.4.4"
 base64 = "0.10.0"
-
-[replace]
-"swf-parser:0.0.8" = { git = 'https://github.com/lykenware/swf-parser', branch = "submodule-less" }
 
 [lib]
 doctest = false
