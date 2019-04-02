@@ -345,7 +345,7 @@
             function playSound(sound_data, sound) {
                 if(sound.userTimeline && sound.userTimeline != timeline)
                     return console.error('sound already in use by', sound.userTimeline);
-                sound.loop = !!sound_data.loops;
+                sound.loop = sound_data.loops !== null;
                 if(!(sound_data.no_restart && sound.userTimeline == timeline)) {
                     // FIXME(eddyb) couple this with `requestAnimationFrame`
                     // (currently calling `showFrame` in a loop doesn't do the right thing).

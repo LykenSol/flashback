@@ -108,36 +108,9 @@ pub struct Layer<'a> {
 }
 
 #[derive(Debug)]
-pub struct FrameLabel<'a> {
-    pub name: &'a str,
-    pub anchor: bool,
-}
-
-// HACK(eddyb) move this into swf-{tree,parser}.
-impl<'a> FrameLabel<'a> {
-    pub fn try_parse(tag: &'a swf::tags::Unknown) -> Option<Self> {
-        if tag.code != 43 {
-            return None;
-        }
-
-        let mut anchor = false;
-        let mut nil_pos = tag.data.len() - 1;
-        if tag.data[nil_pos] != 0 {
-            nil_pos -= 1;
-            anchor = true;
-        }
-        assert_eq!(tag.data[nil_pos], 0);
-
-        Some(FrameLabel {
-            name: str::from_utf8(&tag.data[..nil_pos]).unwrap(),
-            anchor,
-        })
-    }
-}
-
-#[derive(Debug)]
 pub struct SoundStream {
     pub start: Frame,
+    pub format: swf::AudioCodingFormat,
     // FIXME(eddyb) support multiple formats.
     pub mp3: Vec<u8>,
 }
@@ -147,7 +120,7 @@ pub struct Timeline<'a> {
     pub layers: BTreeMap<Depth, Layer<'a>>,
     pub actions: BTreeMap<Frame, Vec<avm1::Code>>,
     pub labels: BTreeMap<&'a str, Frame>,
-    pub sounds: BTreeMap<Frame, Vec<sound::StartSound>>,
+    pub sounds: BTreeMap<Frame, Vec<&'a swf::tags::StartSound>>,
     pub sound_stream: Option<SoundStream>,
     pub frame_count: Frame,
 }
@@ -210,7 +183,10 @@ impl<'a> TimelineBuilder<'a> {
             || place.background_color.is_some()
             || place.clip_actions.is_some()
         {
-            eprintln!("unsupported features in {:?}", place);
+            eprintln!(
+                "TimelineBuilder::place_object: unsupported features in {:?}",
+                place
+            );
         }
     }
 
@@ -240,11 +216,21 @@ impl<'a> TimelineBuilder<'a> {
             .push(avm1::Code::compile(actions))
     }
 
-    pub fn frame_label(&mut self, label: FrameLabel<'a>) {
-        self.timeline.labels.insert(label.name, self.current_frame);
+    pub fn frame_label(&mut self, label: &'a swf::tags::FrameLabel) {
+        self.timeline.labels.insert(&label.name, self.current_frame);
     }
 
-    pub fn start_sound(&mut self, sound: sound::StartSound) {
+    pub fn start_sound(&mut self, sound: &'a swf::tags::StartSound) {
+        if sound.sound_info.envelope_records.is_some()
+            || sound.sound_info.in_point.is_some()
+            || sound.sound_info.out_point.is_some()
+            || sound.sound_info.sync_stop
+        {
+            eprintln!(
+                "TimelineBuilder::start_sound: unsupported SoundInfo: {:?}",
+                sound
+            );
+        }
         self.timeline
             .sounds
             .entry(self.current_frame)
@@ -252,17 +238,30 @@ impl<'a> TimelineBuilder<'a> {
             .push(sound);
     }
 
-    pub fn sound_stream_head(&mut self, _head: sound::SoundStreamHead) {
+    pub fn sound_stream_head(&mut self, head: &swf::tags::SoundStreamHead) {
         assert!(self.timeline.sound_stream.is_none());
         self.timeline.sound_stream = Some(SoundStream {
             start: self.current_frame,
+            format: head.stream_format,
             mp3: vec![],
         });
     }
 
-    pub fn sound_stream_block(&mut self, block: sound::SoundStreamBlock) {
+    pub fn sound_stream_block(&mut self, block: &swf::tags::SoundStreamBlock) {
         match &mut self.timeline.sound_stream {
-            Some(stream) => stream.mp3.extend(block.as_mp3().mp3.data),
+            Some(stream) => {
+                let mp3 = match stream.format {
+                    swf::AudioCodingFormat::Mp3 => sound::Mp3StreamBlock::from(block).mp3,
+                    _ => {
+                        eprintln!(
+                            "TimelineBuilder::sound_stream_block: unsupported format: {:?}",
+                            stream.format,
+                        );
+                        return;
+                    }
+                };
+                stream.mp3.extend(mp3.data);
+            }
             None => {
                 eprintln!(
                     "TimelineBuilder::sound_stream_block: unsupported {:?}",
