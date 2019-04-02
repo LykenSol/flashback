@@ -1,0 +1,40 @@
+[package]
+name = "flashback-web"
+version = "0.0.1"
+authors = ["Eduard-Mihai Burtescu <edy.burt@gmail.com>"]
+edition = "2018"
+repository = "https://github.com/lykenware/flashback"
+license = "MIT/Apache-2.0"
+keywords = ["Flash", "SWF"]
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies.flashback]
+path = ".."
+version = "0.0.1"
+
+[dependencies]
+futures = "0.1.26"
+js-sys = "0.3.17"
+swf-parser = "0.3.0"
+wasm-bindgen = "0.2.40"
+wasm-bindgen-futures = "0.3.17"
+
+[dependencies.web-sys]
+version = "0.3.4"
+features = [
+  'console',
+  'Document',
+  'Element',
+  'EventTarget',
+  'HtmlElement',
+  'Location',
+  'Node',
+  'Request',
+  'RequestInit',
+  'RequestMode',
+  'Response',
+  'SvgScriptElement',
+  'Window',
+]

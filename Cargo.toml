@@ -22,3 +22,8 @@ base64 = "0.10.0"
 [lib]
 doctest = false
 test = false
+
+[workspace]
+members = [
+    "web",
+]

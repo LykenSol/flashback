@@ -354,7 +354,7 @@
                 var promise = sound.play();
                 if(promise && promise.catch)
                     promise.catch(function(e) {
-                        console.error('failed to play sound: '+e.toString());
+                        console.error('failed to play sound: ' + e.toString());
                     });
                 sound.userTimeline = timeline;
                 timeline.activeSounds[sound_data.character] = sound;
@@ -407,7 +407,7 @@
     }
     forEachSound(function() { anySounds = true; })
     if(anySounds) {
-        var viewBox = document.rootElement.getAttribute('viewBox')
+        var viewBox = timeline.container.parentNode.getAttribute('viewBox')
             .split(' ')
             .map(function(x) { return +x; });
 
@@ -423,7 +423,7 @@
         var x1 = x + size / 3 * 2;
         var y0 = y - size / 2;
         var y1 = y + size / 2;
-        playButton.setAttribute('d', 'M'+x1+','+y+' L'+x0+','+y0+' L'+x0+','+y1+' Z');
+        playButton.setAttribute('d', 'M' + x1 + ',' + y + ' L' + x0 + ',' + y0 + ' L' + x0 + ',' + y1 + ' Z');
         playButton.setAttribute('fill', 'black');
         playButton.style.cursor = 'pointer';
         var clicked = false;
