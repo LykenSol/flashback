@@ -71,7 +71,7 @@ fn load_swf_from_hash(container: Element) {
     let hash = location.hash().unwrap();
     if !hash.starts_with("#") {
         container.set_inner_html(&format!(
-            "Please navigate to {}/#foo.com/path/to/flash/file.swf",
+            "Please navigate to {}#foo.com/path/to/flash/file.swf",
             location.href().unwrap()
         ));
     } else {
