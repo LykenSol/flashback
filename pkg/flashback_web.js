@@ -211,6 +211,14 @@ __exports.__widl_instanceof_SVGScriptElement = function(idx) { return getObject(
 
 __exports.__widl_instanceof_Window = function(idx) { return getObject(idx) instanceof Window ? 1 : 0; };
 
+__exports.__widl_f_request_animation_frame_Window = function(arg0, arg1, exnptr) {
+    try {
+        return getObject(arg0).requestAnimationFrame(getObject(arg1));
+    } catch (e) {
+        handleError(exnptr, e);
+    }
+};
+
 __exports.__widl_f_document_Window = function(arg0) {
 
     const val = getObject(arg0).document;
@@ -281,7 +289,7 @@ __exports.__wbg_new_7440491cc5e719b8 = function(arg0, arg1) {
         }
 
     };
-    cbarg0.f = wasm.__wbg_function_table.get(553);
+    cbarg0.f = wasm.__wbg_function_table.get(560);
     cbarg0.a = arg0;
     cbarg0.b = arg1;
     try {
@@ -429,9 +437,9 @@ __exports.__wbindgen_throw = function(ptr, len) {
     throw new Error(getStringFromWasm(ptr, len));
 };
 
-__exports.__wbindgen_closure_wrapper90 = function(a, b, _ignored) {
-    const f = wasm.__wbg_function_table.get(30);
-    const d = wasm.__wbg_function_table.get(31);
+__exports.__wbindgen_closure_wrapper98 = function(a, b, _ignored) {
+    const f = wasm.__wbg_function_table.get(37);
+    const d = wasm.__wbg_function_table.get(38);
     const cb = function() {
         this.cnt++;
         let a = this.a;
@@ -453,9 +461,9 @@ __exports.__wbindgen_closure_wrapper90 = function(a, b, _ignored) {
     return addHeapObject(real);
 };
 
-__exports.__wbindgen_closure_wrapper1303 = function(a, b, _ignored) {
-    const f = wasm.__wbg_function_table.get(530);
-    const d = wasm.__wbg_function_table.get(531);
+__exports.__wbindgen_closure_wrapper1314 = function(a, b, _ignored) {
+    const f = wasm.__wbg_function_table.get(537);
+    const d = wasm.__wbg_function_table.get(538);
     const cb = function(arg0) {
         this.cnt++;
         let a = this.a;
