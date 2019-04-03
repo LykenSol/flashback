@@ -448,7 +448,13 @@ impl Context {
 
             Character::DynamicText(def) => {
                 let mut text = svg::node::element::Text::new().add(svg::node::Text::new(
-                    def.text.as_ref().map_or("", |s| &s[..]),
+                    // HACK(eddyb) this only handles escaping `<`, should either
+                    // fix the `svg` crate, or switch to one which does escape,
+                    // like `svgdom`.
+                    def.text
+                        .as_ref()
+                        .map_or("", |s| &s[..])
+                        .replace("<", "&lt;"),
                 ));
 
                 if let Some(size) = def.font_size {
