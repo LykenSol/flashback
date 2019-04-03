@@ -25,8 +25,19 @@ fn convert_swf(swf: &[u8]) -> String {
     }
 }
 
-fn load_swf_from_url(container: Element, url: &str) {
-    container.set_inner_html(&format!("Loading `{}`...", url));
+fn request_animation_frame(f: impl FnOnce() + 'static) {
+    let window = web_sys::window().unwrap();
+    let mut f = Some(f);
+    let closure = Closure::wrap(Box::new(move || f.take().unwrap()()) as Box<dyn FnMut()>);
+    window
+        .request_animation_frame(closure.as_ref().unchecked_ref())
+        .unwrap();
+    // FIXME(eddyb) memory management?
+    closure.forget();
+}
+
+fn load_swf_from_url(container: Element, url: String) {
+    container.set_inner_html(&format!("Downloading `{}`...", url));
 
     let mut opts = RequestInit::new();
     opts.mode(RequestMode::Cors);
@@ -51,14 +62,24 @@ fn load_swf_from_url(container: Element, url: &str) {
                 let mut data = vec![0; buffer.length() as usize];
                 buffer.copy_to(&mut data);
 
-                container.set_inner_html(&convert_swf(&data));
+                container.set_inner_html(&format!(
+                    "Converting `{}` ({:.2}kB) to SVG...",
+                    url,
+                    buffer.length() as f64 / 1000.0,
+                ));
 
-                // HACK(eddyb) manually evaluate script sources;
-                if let Some(script) = container.query_selector("script").unwrap() {
-                    if let Ok(script) = script.dyn_into::<SvgScriptElement>() {
-                        js_sys::eval(&script.text_content().unwrap()).unwrap();
-                    }
-                }
+                request_animation_frame(move || {
+                    request_animation_frame(move || {
+                        container.set_inner_html(&convert_swf(&data));
+
+                        // HACK(eddyb) manually evaluate script sources;
+                        if let Some(script) = container.query_selector("script").unwrap() {
+                            if let Ok(script) = script.dyn_into::<SvgScriptElement>() {
+                                js_sys::eval(&script.text_content().unwrap()).unwrap();
+                            }
+                        }
+                    })
+                });
 
                 JsValue::undefined()
             }),
@@ -75,7 +96,7 @@ fn load_swf_from_hash(container: Element) {
             location.href().unwrap()
         ));
     } else {
-        load_swf_from_url(container, &hash[1..]);
+        load_swf_from_url(container, hash[1..].to_string());
     }
 }
 
