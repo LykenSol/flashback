@@ -13,14 +13,6 @@ use svg::node::element::{
 };
 use swf_tree as swf;
 
-// FIXME(eddyb) upstream these as methods on `swf-fixed` types.
-fn ufixed8p8_epsilons(x: &swf::fixed::Ufixed8P8) -> u16 {
-    unsafe { std::mem::transmute_copy(x) }
-}
-fn ufixed8p8_to_f64(x: &swf::fixed::Ufixed8P8) -> f64 {
-    ufixed8p8_epsilons(x) as f64 / (1 << 8) as f64
-}
-
 mod animate;
 
 #[derive(Default)]
@@ -100,7 +92,7 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
 
     let mut cx = Context {
         config,
-        frame_rate: ufixed8p8_to_f64(&movie.header.frame_rate),
+        frame_rate: f32::from(movie.header.frame_rate) as f64,
 
         svg_defs: Definitions::new(),
         js_defs: js::code! {},

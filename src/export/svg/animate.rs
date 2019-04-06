@@ -6,20 +6,6 @@ use svg::node::element::{Animate, AnimateTransform, Element, Filter, Group, Use}
 use svg::Node;
 use swf_tree as swf;
 
-// FIXME(eddyb) upstream these as methods on `swf-fixed` types.
-fn sfixed8p8_epsilons(x: &swf::fixed::Sfixed8P8) -> i16 {
-    unsafe { std::mem::transmute_copy(x) }
-}
-fn sfixed16p16_epsilons(x: &swf::fixed::Sfixed16P16) -> i32 {
-    unsafe { std::mem::transmute_copy(x) }
-}
-fn sfixed8p8_to_f64(x: &swf::fixed::Sfixed8P8) -> f64 {
-    sfixed8p8_epsilons(x) as f64 / (1 << 8) as f64
-}
-fn sfixed16p16_to_f64(x: &swf::fixed::Sfixed16P16) -> f64 {
-    sfixed16p16_epsilons(x) as f64 / (1 << 16) as f64
-}
-
 struct Animation<T> {
     frame_count: Frame,
     movie_duration: f64,
@@ -114,10 +100,10 @@ struct Transform {
 
 impl<'a> From<&'a swf::Matrix> for Transform {
     fn from(matrix: &swf::Matrix) -> Self {
-        let a = sfixed16p16_to_f64(&matrix.scale_x);
-        let b = sfixed16p16_to_f64(&matrix.rotate_skew0);
-        let c = sfixed16p16_to_f64(&matrix.rotate_skew1);
-        let d = sfixed16p16_to_f64(&matrix.scale_y);
+        let a = f64::from(matrix.scale_x);
+        let b = f64::from(matrix.rotate_skew0);
+        let c = f64::from(matrix.rotate_skew1);
+        let d = f64::from(matrix.scale_y);
 
         let rotate = b.atan2(a);
         let skew_y = d.atan2(c) - PI / 2.0 - rotate;
@@ -149,7 +135,7 @@ impl Into<svg::node::Value> for Transform {
 // TODO(eddyb) consider using linear <feComponentTransfer>.
 #[derive(Copy, Clone, PartialEq)]
 struct ColorMatrix {
-    mul: [f64; 4],
+    mul: [f32; 4],
     add: [i16; 4],
 }
 
@@ -157,10 +143,10 @@ impl<'a> From<&'a swf::ColorTransformWithAlpha> for ColorMatrix {
     fn from(color_transform: &swf::ColorTransformWithAlpha) -> Self {
         ColorMatrix {
             mul: [
-                sfixed8p8_to_f64(&color_transform.red_mult),
-                sfixed8p8_to_f64(&color_transform.green_mult),
-                sfixed8p8_to_f64(&color_transform.blue_mult),
-                sfixed8p8_to_f64(&color_transform.alpha_mult),
+                f32::from(color_transform.red_mult),
+                f32::from(color_transform.green_mult),
+                f32::from(color_transform.blue_mult),
+                f32::from(color_transform.alpha_mult),
             ],
             add: [
                 color_transform.red_add,

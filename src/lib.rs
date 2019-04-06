@@ -1,3 +1,5 @@
+#![forbid(unsafe_code)]
+
 pub mod avm1;
 pub mod bitmap;
 pub mod button;

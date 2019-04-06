@@ -19,57 +19,7 @@ impl Add for Frame {
     }
 }
 
-fn copy_matrix(matrix: &swf::Matrix) -> swf::Matrix {
-    swf::Matrix {
-        scale_x: matrix.scale_x,
-        scale_y: matrix.scale_y,
-        rotate_skew0: matrix.rotate_skew0,
-        rotate_skew1: matrix.rotate_skew1,
-        translate_x: matrix.translate_x,
-        translate_y: matrix.translate_y,
-    }
-}
-
-pub fn default_matrix() -> swf::Matrix {
-    swf::Matrix {
-        scale_x: swf::fixed::Sfixed16P16::from_epsilons(1 << 16),
-        scale_y: swf::fixed::Sfixed16P16::from_epsilons(1 << 16),
-        rotate_skew0: swf::fixed::Sfixed16P16::from_epsilons(0),
-        rotate_skew1: swf::fixed::Sfixed16P16::from_epsilons(0),
-        translate_x: 0,
-        translate_y: 0,
-    }
-}
-
-fn copy_color_transform(
-    color_transform: &swf::ColorTransformWithAlpha,
-) -> swf::ColorTransformWithAlpha {
-    swf::ColorTransformWithAlpha {
-        red_mult: color_transform.red_mult,
-        green_mult: color_transform.green_mult,
-        blue_mult: color_transform.blue_mult,
-        alpha_mult: color_transform.alpha_mult,
-        red_add: color_transform.red_add,
-        green_add: color_transform.green_add,
-        blue_add: color_transform.blue_add,
-        alpha_add: color_transform.alpha_add,
-    }
-}
-
-pub fn default_color_transform() -> swf::ColorTransformWithAlpha {
-    swf::ColorTransformWithAlpha {
-        red_mult: swf::fixed::Sfixed8P8::from_epsilons(1 << 8),
-        green_mult: swf::fixed::Sfixed8P8::from_epsilons(1 << 8),
-        blue_mult: swf::fixed::Sfixed8P8::from_epsilons(1 << 8),
-        alpha_mult: swf::fixed::Sfixed8P8::from_epsilons(1 << 8),
-        red_add: 0,
-        green_add: 0,
-        blue_add: 0,
-        alpha_add: 0,
-    }
-}
-
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub struct Object<'a> {
     pub character: CharacterId,
     pub matrix: swf::Matrix,
@@ -78,25 +28,13 @@ pub struct Object<'a> {
     pub ratio: Option<u16>,
 }
 
-impl<'a> Clone for Object<'a> {
-    fn clone(&self) -> Self {
-        Object {
-            character: self.character,
-            matrix: copy_matrix(&self.matrix),
-            name: self.name,
-            color_transform: copy_color_transform(&self.color_transform),
-            ratio: self.ratio,
-        }
-    }
-}
-
 impl<'a> Object<'a> {
     pub fn new(character: CharacterId) -> Self {
         Object {
             character,
-            matrix: default_matrix(),
+            matrix: swf::Matrix::default(),
             name: None,
-            color_transform: default_color_transform(),
+            color_transform: swf::ColorTransformWithAlpha::default(),
             ratio: None,
         }
     }
@@ -138,7 +76,7 @@ impl<'a> TimelineBuilder<'a> {
         // Find the last changed frame for this object, if it's not
         // the current one, and copy its state of the object.
         let prev_obj = match layer.frames.range(..=self.current_frame).rev().next() {
-            Some((&frame, obj)) if frame != self.current_frame => obj.clone(),
+            Some((&frame, &obj)) if frame != self.current_frame => obj,
             _ => None,
         };
 
@@ -162,14 +100,14 @@ impl<'a> TimelineBuilder<'a> {
                 assert_eq!(obj.character, character);
             }
         }
-        if let Some(matrix) = &place.matrix {
-            obj.matrix = copy_matrix(matrix);
+        if let Some(matrix) = place.matrix {
+            obj.matrix = matrix;
         }
         if let Some(name) = &place.name {
             obj.name = Some(name);
         }
-        if let Some(color_transform) = &place.color_transform {
-            obj.color_transform = copy_color_transform(color_transform);
+        if let Some(color_transform) = place.color_transform {
+            obj.color_transform = color_transform;
         }
         if let Some(ratio) = place.ratio {
             obj.ratio = Some(ratio);

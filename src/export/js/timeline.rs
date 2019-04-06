@@ -1,68 +1,46 @@
 use crate::export::js;
-use crate::timeline::{default_color_transform, default_matrix, Depth, Frame, Timeline};
+use crate::timeline::{Depth, Frame, Timeline};
 use swf_tree as swf;
 
-// FIXME(eddyb) upstream these as methods on `swf-fixed` types.
-fn sfixed8p8_epsilons(x: &swf::fixed::Sfixed8P8) -> i16 {
-    unsafe { std::mem::transmute_copy(x) }
-}
-fn sfixed16p16_epsilons(x: &swf::fixed::Sfixed16P16) -> i32 {
-    unsafe { std::mem::transmute_copy(x) }
-}
-fn sfixed8p8_to_f64(x: &swf::fixed::Sfixed8P8) -> f64 {
-    sfixed8p8_epsilons(x) as f64 / (1 << 8) as f64
-}
-fn sfixed16p16_to_f64(x: &swf::fixed::Sfixed16P16) -> f64 {
-    sfixed16p16_epsilons(x) as f64 / (1 << 16) as f64
-}
-
-pub fn export_matrix(matrix: &swf::Matrix) -> js::Code {
-    if *matrix == default_matrix() {
+#[rustfmt::skip]
+pub fn export_matrix(m: &swf::Matrix) -> js::Code {
+    if *m == swf::Matrix::default() {
         return js::code! { "null" };
     }
     js::array(
         [
-            &matrix.scale_x,
-            &matrix.rotate_skew0,
-            &matrix.rotate_skew1,
-            &matrix.scale_y,
+            m.scale_x, m.rotate_skew0,
+            m.rotate_skew1, m.scale_y,
         ]
         .iter()
-        .map(|x| js::code! { sfixed16p16_to_f64(x) })
+        .map(|&x| js::code! { f64::from(x) })
         .chain(
-            [matrix.translate_x, matrix.translate_y]
+            [m.translate_x, m.translate_y]
                 .iter()
                 .map(|x| js::code! { x }),
         ),
     )
 }
 
-pub fn export_color_transform(color_transform: &swf::ColorTransformWithAlpha) -> js::Code {
-    if *color_transform == default_color_transform() {
+#[rustfmt::skip]
+pub fn export_color_transform(c: &swf::ColorTransformWithAlpha) -> js::Code {
+    if *c == swf::ColorTransformWithAlpha::default() {
         return js::code! { "null" };
     }
+
     js::array(
         [
-            sfixed8p8_to_f64(&color_transform.red_mult),
-            0.0,
-            0.0,
-            0.0,
-            color_transform.red_add as f64 / 255.0,
-            0.0,
-            sfixed8p8_to_f64(&color_transform.green_mult),
-            0.0,
-            0.0,
-            color_transform.green_add as f64 / 255.0,
-            0.0,
-            0.0,
-            sfixed8p8_to_f64(&color_transform.blue_mult),
-            0.0,
-            color_transform.blue_add as f64 / 255.0,
-            0.0,
-            0.0,
-            0.0,
-            sfixed8p8_to_f64(&color_transform.alpha_mult),
-            color_transform.alpha_add as f64 / 255.0,
+            f32::from(c.red_mult) as f64, 0.0, 0.0, 0.0,
+            c.red_add as f64 / 255.0,
+
+            0.0, f32::from(c.green_mult) as f64, 0.0, 0.0,
+            c.green_add as f64 / 255.0,
+
+            0.0, 0.0, f32::from(c.blue_mult) as f64, 0.0,
+            c.blue_add as f64 / 255.0,
+
+            0.0, 0.0, 0.0, f32::from(c.alpha_mult) as f64,
+            c.alpha_add as f64 / 255.0,
         ]
         .iter()
         .map(|x| js::code! { x }),
