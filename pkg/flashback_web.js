@@ -437,7 +437,7 @@ __exports.__wbindgen_throw = function(ptr, len) {
     throw new Error(getStringFromWasm(ptr, len));
 };
 
-__exports.__wbindgen_closure_wrapper98 = function(a, b, _ignored) {
+__exports.__wbindgen_closure_wrapper97 = function(a, b, _ignored) {
     const f = wasm.__wbg_function_table.get(37);
     const d = wasm.__wbg_function_table.get(38);
     const cb = function() {
@@ -461,7 +461,7 @@ __exports.__wbindgen_closure_wrapper98 = function(a, b, _ignored) {
     return addHeapObject(real);
 };
 
-__exports.__wbindgen_closure_wrapper1324 = function(a, b, _ignored) {
+__exports.__wbindgen_closure_wrapper1325 = function(a, b, _ignored) {
     const f = wasm.__wbg_function_table.get(534);
     const d = wasm.__wbg_function_table.get(535);
     const cb = function(arg0) {
