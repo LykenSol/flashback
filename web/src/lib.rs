@@ -95,9 +95,19 @@ fn load_swf_from_hash(container: Element) {
             "Please navigate to {}#foo.com/path/to/flash/file.swf",
             location.href().unwrap()
         ));
-    } else {
-        load_swf_from_url(container, hash[1..].to_string());
+        return;
     }
+
+    let url = &hash[1..];
+    let url = if url.starts_with("hs:") {
+        format!(
+            "cdn.mspaintadventures.com/storyfiles/hs2/{0}/{0}.swf",
+            &url[3..]
+        )
+    } else {
+        url.to_string()
+    };
+    load_swf_from_url(container, url);
 }
 
 #[wasm_bindgen(start)]
