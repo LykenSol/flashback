@@ -1,5 +1,5 @@
 use crate::bitmap::Bitmap;
-use crate::button;
+use crate::button::{self, Button};
 use crate::dictionary::{Character, CharacterId, Dictionary};
 use crate::export::js;
 use crate::shape::{Line, Shape};
@@ -64,6 +64,9 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
             swf::Tag::DefineBitmap(def) => {
                 dictionary.define(CharacterId(def.id), Character::Bitmap(Bitmap::from(def)));
             }
+            swf::Tag::DefineButton(def) => {
+                dictionary.define(CharacterId(def.id), Character::Button(Button::from(def)));
+            }
             swf::Tag::FrameLabel(label) => timeline_builder.frame_label(label),
             swf::Tag::PlaceObject(place) => timeline_builder.place_object(place),
             swf::Tag::RemoveObject(remove) => timeline_builder.remove_object(remove),
@@ -72,14 +75,6 @@ pub fn export(movie: &swf::Movie, config: Config) -> svg::Document {
             swf::Tag::SoundStreamHead(head) => timeline_builder.sound_stream_head(head),
             swf::Tag::SoundStreamBlock(block) => timeline_builder.sound_stream_block(block),
             swf::Tag::ShowFrame => timeline_builder.advance_frame(),
-            swf::Tag::Unknown(tag) => {
-                // FIXME(eddyb) `swf-parser` now implements DefineButton, move over to that.
-                if let Some(def) = button::DefineButton::try_parse(tag) {
-                    dictionary.define(def.id, Character::Button(def.button));
-                } else {
-                    eprintln!("unknown tag: {:?}", tag);
-                }
-            }
             _ => eprintln!("unknown tag: {:?}", tag),
         }
     }

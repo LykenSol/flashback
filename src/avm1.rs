@@ -54,6 +54,18 @@ pub struct Code {
 }
 
 impl Code {
+    pub fn parse_and_compile(mut data: &[u8]) -> Self {
+        let mut actions = vec![];
+        while data[0] != 0 {
+            let (rest, action) = avm1_parser::parse_action(data).unwrap();
+            data = rest;
+            actions.push(action);
+        }
+        assert_eq!(data, [0]);
+
+        Code::compile(actions)
+    }
+
     pub fn compile(actions: Vec<avm1_tree::Action>) -> Self {
         let mut consts = vec![];
         let mut regs = vec![];

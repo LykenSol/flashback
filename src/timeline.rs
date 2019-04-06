@@ -138,20 +138,11 @@ impl<'a> TimelineBuilder<'a> {
     }
 
     pub fn do_action(&mut self, do_action: &'a swf::tags::DoAction) {
-        let mut data = &do_action.actions[..];
-        let mut actions = vec![];
-        while data[0] != 0 {
-            let (rest, action) = avm1_parser::parse_action(data).unwrap();
-            data = rest;
-            actions.push(action);
-        }
-        assert_eq!(data, [0]);
-
         self.timeline
             .actions
             .entry(self.current_frame)
             .or_default()
-            .push(avm1::Code::compile(actions))
+            .push(avm1::Code::parse_and_compile(&do_action.actions))
     }
 
     pub fn frame_label(&mut self, label: &'a swf::tags::FrameLabel) {

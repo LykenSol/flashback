@@ -1,7 +1,6 @@
 use crate::dictionary::CharacterId;
 use crate::timeline::{Depth, Object};
 use std::collections::BTreeMap;
-use swf_parser::parsers::basic_data_types::{parse_color_transform_with_alpha, parse_matrix};
 use swf_tree as swf;
 
 #[derive(Clone, Debug, Default)]
@@ -44,121 +43,68 @@ pub struct Button {
     pub handlers: Vec<EventHandler>,
 }
 
-pub struct DefineButton {
-    pub id: CharacterId,
-    pub button: Button,
-}
-
-// HACK(eddyb) move this into swf-{tree,parser}.
-impl DefineButton {
-    pub fn try_parse(tag: &swf::tags::Unknown) -> Option<Self> {
-        if tag.code != 34 {
-            return None;
-        }
-
-        let id = CharacterId(u16::from_le_bytes([tag.data[0], tag.data[1]]));
-        let action_offset = u16::from_le_bytes([tag.data[3], tag.data[4]]);
-        let mut data = &tag.data[5..];
-
+impl<'a> From<&'a swf::tags::DefineButton> for Button {
+    fn from(button: &swf::tags::DefineButton) -> Self {
         let mut objects = PerState::<BTreeMap<Depth, Object>>::default();
-        while data[0] & 0xf != 0 {
-            let flags = data[0];
-            data = &data[1..];
-            if (flags & 0x10) != 0 {
-                eprintln!("unsupported button filter list");
-            }
-            if (flags & 0x20) != 0 {
-                eprintln!("unsupported button blend mode");
-            }
-            if (flags & 0xf0) != 0 {
-                return None;
+        for record in &button.characters {
+            if !record.filters.is_empty() || record.blend_mode != swf::BlendMode::Normal {
+                eprintln!("Button::from: unsupported features in {:?}", record);
             }
 
-            let character = CharacterId(u16::from_le_bytes([data[0], data[1]]));
-            let depth = Depth(u16::from_le_bytes([data[2], data[3]]));
-            data = &data[4..];
-
-            let (rest, matrix) = parse_matrix(data).unwrap();
-            data = rest;
-
-            let (rest, color_transform) = parse_color_transform_with_alpha(data).unwrap();
-            data = rest;
+            let depth = Depth(record.depth);
 
             let object = Object {
-                character,
-                matrix,
+                character: CharacterId(record.character_id),
+                matrix: record.matrix,
                 name: None,
-                color_transform,
+                color_transform: record.color_transform.unwrap_or_default(),
                 ratio: None,
             };
 
-            if (flags & 1) != 0 {
-                objects.up.insert(depth, object.clone());
+            if record.state_up {
+                objects.up.insert(depth, object);
             }
-            if (flags & 2) != 0 {
-                objects.over.insert(depth, object.clone());
+            if record.state_over {
+                objects.over.insert(depth, object);
             }
-            if (flags & 4) != 0 {
-                objects.down.insert(depth, object.clone());
+            if record.state_down {
+                objects.down.insert(depth, object);
             }
-            if (flags & 8) != 0 {
-                objects.hit_test.insert(depth, object.clone());
-            }
-        }
-        assert_eq!(data[0], 0);
-        data = &data[1..];
-
-        let mut handlers = vec![];
-        while action_offset != 0 && !data.is_empty() {
-            let action_size = u16::from_le_bytes([data[0], data[1]]);
-            let flags = u16::from_le_bytes([data[2], data[3]]);
-            data = &data[4..];
-
-            let mut on = vec![];
-
-            let mouse_events = &[
-                Event::HoverIn,
-                Event::HoverOut,
-                Event::Down,
-                Event::Up,
-                Event::DragOut,
-                Event::DragIn,
-                Event::UpOut,
-                Event::DownIn,
-                Event::DownOut,
-            ];
-            for (bit, &event) in mouse_events.iter().enumerate() {
-                if (flags & (1 << bit)) != 0 {
-                    on.push(event);
-                };
-            }
-
-            let key_code = (flags >> 9) as u8;
-            if key_code != 0 {
-                on.push(Event::KeyPress(key_code));
-            }
-
-            let mut actions = vec![];
-            while data[0] != 0 {
-                let (rest, action) = avm1_parser::parse_action(data).unwrap();
-                data = rest;
-                actions.push(action);
-            }
-            assert_eq!(data[0], 0);
-            data = &data[1..];
-
-            let actions = crate::avm1::Code::compile(actions);
-
-            handlers.push(EventHandler { on, actions });
-
-            if action_size == 0 {
-                break;
+            if record.state_hit_test {
+                objects.hit_test.insert(depth, object);
             }
         }
 
-        Some(DefineButton {
-            id,
-            button: Button { objects, handlers },
-        })
+        let handlers = button
+            .actions
+            .iter()
+            .map(|cond_actions| {
+                let cond = cond_actions
+                    .conditions
+                    .expect("ButtonCondAction missing conditions");
+                let on = [
+                    (Event::HoverIn, cond.idle_to_over_up),
+                    (Event::HoverOut, cond.over_up_to_idle),
+                    (Event::Down, cond.over_up_to_over_down),
+                    (Event::Up, cond.over_down_to_over_up),
+                    (Event::DragOut, cond.over_down_to_out_down),
+                    (Event::DragIn, cond.out_down_to_over_down),
+                    (Event::UpOut, cond.out_down_to_idle),
+                    (Event::DownIn, cond.idle_to_over_down),
+                    (Event::DownOut, cond.over_down_to_idle),
+                ]
+                .iter()
+                .filter(|&&(_, cond)| cond)
+                .map(|&(ev, _)| ev)
+                .chain(cond.key_press.map(|key| Event::KeyPress(key as u8)))
+                .collect();
+
+                let actions = crate::avm1::Code::parse_and_compile(&cond_actions.actions);
+
+                EventHandler { on, actions }
+            })
+            .collect();
+
+        Button { objects, handlers }
     }
 }
