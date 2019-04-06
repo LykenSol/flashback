@@ -104,6 +104,8 @@ fn load_swf_from_hash(container: Element) {
             "cdn.mspaintadventures.com/storyfiles/hs2/{0}/{0}.swf",
             &url[3..]
         )
+    } else if url.starts_with("z0r:") {
+        format!("z0r.de/L/z0r-de_{}.swf", &url[4..])
     } else {
         url.to_string()
     };
