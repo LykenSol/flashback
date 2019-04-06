@@ -82,7 +82,7 @@ impl<'a> From<&'a swf::tags::DefineButton> for Button {
                 let cond = cond_actions
                     .conditions
                     .expect("ButtonCondAction missing conditions");
-                let on = [
+                let mut mouse_ev_and_cond = [
                     (Event::HoverIn, cond.idle_to_over_up),
                     (Event::HoverOut, cond.over_up_to_idle),
                     (Event::Down, cond.over_up_to_over_down),
@@ -92,12 +92,26 @@ impl<'a> From<&'a swf::tags::DefineButton> for Button {
                     (Event::UpOut, cond.out_down_to_idle),
                     (Event::DownIn, cond.idle_to_over_down),
                     (Event::DownOut, cond.over_down_to_idle),
-                ]
-                .iter()
-                .filter(|&&(_, cond)| cond)
-                .map(|&(ev, _)| ev)
-                .chain(cond.key_press.map(|key| Event::KeyPress(key as u8)))
-                .collect();
+                ];
+                let mut key_press = cond.key_press.unwrap_or(0) as u8;
+
+                // HACK(eddyb) The order is somewhat reversed in `swf-parser`,
+                // so we have to reconstruct the flags and reparse them.
+                let mut flags = key_press as u16;
+                for (i, &(_, cond)) in mouse_ev_and_cond.iter().enumerate() {
+                    flags |= (cond as u16) << (7 + (1 + i) % 8);
+                }
+                for (i, (_, cond)) in mouse_ev_and_cond.iter_mut().enumerate() {
+                    *cond = (flags & (1 << i)) != 0;
+                }
+                key_press = (flags >> 9) as u8;
+
+                let on = mouse_ev_and_cond
+                    .iter()
+                    .filter(|&&(_, cond)| cond)
+                    .map(|&(ev, _)| ev)
+                    .chain(Some(key_press).filter(|&k| k != 0).map(Event::KeyPress))
+                    .collect();
 
                 let actions = crate::avm1::Code::parse_and_compile(&cond_actions.actions);
 
