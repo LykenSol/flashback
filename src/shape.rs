@@ -256,18 +256,10 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
 
                     continue;
                 }
-                swf::ShapeRecord::StraightEdge(line) => Line {
+                swf::ShapeRecord::Edge(edge) => Line {
                     from: Point::default(),
-                    bezier_control: None,
-                    to: Point::from(&line.delta),
-                },
-                swf::ShapeRecord::CurvedEdge(bezier) => {
-                    let control = Point::from(&bezier.control_delta);
-                    Line {
-                        from: Point::default(),
-                        bezier_control: Some(control),
-                        to: control + Point::from(&bezier.anchor_delta),
-                    }
+                    bezier_control: edge.control_delta.map(|control| Point::from(&control)),
+                    to: Point::from(&edge.delta),
                 }
             };
 
