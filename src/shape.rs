@@ -8,8 +8,8 @@ pub struct Point {
     pub y: i32,
 }
 
-impl<'a> From<&'a swf::Vector2D> for Point {
-    fn from(v: &swf::Vector2D) -> Self {
+impl From<swf::Vector2D> for Point {
+    fn from(v: swf::Vector2D) -> Self {
         Point { x: v.x, y: v.y }
     }
 }
@@ -241,7 +241,7 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
                             .extend(new_styles.line.iter().map(StyledPath::new));
                     }
 
-                    if let Some(move_to) = change.move_to.as_ref().map(Point::from) {
+                    if let Some(move_to) = change.move_to.map(Point::from) {
                         pos = move_to;
                     }
                     if let Some(left_fill) = change.left_fill {
@@ -257,8 +257,8 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
                 swf::ShapeRecord::Edge(edge) => {
                     let line = Line {
                         from: Point::default(),
-                        bezier_control: edge.control_delta.map(|control| Point::from(&control)),
-                        to: Point::from(&edge.delta),
+                        bezier_control: edge.control_delta.map(Point::from),
+                        to: Point::from(edge.delta),
                     };
                     let line = line.map_points(|p| pos + p);
                     path.push(line);
