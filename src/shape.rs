@@ -209,7 +209,7 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
 
         let mut path = vec![];
         for record in &def.shape.records {
-            let line = match record {
+            match record {
                 swf::ShapeRecord::StyleChange(change) => {
                     match change {
                         // Moving without changing styles stays within a path.
@@ -253,19 +253,18 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
                     if let Some(line_style) = change.line_style {
                         styles.stroke.set_from_swf(line_style);
                     }
-
-                    continue;
                 }
-                swf::ShapeRecord::Edge(edge) => Line {
-                    from: Point::default(),
-                    bezier_control: edge.control_delta.map(|control| Point::from(&control)),
-                    to: Point::from(&edge.delta),
+                swf::ShapeRecord::Edge(edge) => {
+                    let line = Line {
+                        from: Point::default(),
+                        bezier_control: edge.control_delta.map(|control| Point::from(&control)),
+                        to: Point::from(&edge.delta),
+                    };
+                    let line = line.map_points(|p| pos + p);
+                    path.push(line);
+                    pos = line.to;
                 }
             };
-
-            let line = line.map_points(|p| pos + p);
-            path.push(line);
-            pos = line.to;
         }
 
         shape.add_path(&path, styles);
