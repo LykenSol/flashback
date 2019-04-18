@@ -8,8 +8,8 @@ pub struct Point {
     pub y: i32,
 }
 
-impl<'a> From<&'a swf::Vector2D> for Point {
-    fn from(v: &swf::Vector2D) -> Self {
+impl From<swf::Vector2D> for Point {
+    fn from(v: swf::Vector2D) -> Self {
         Point { x: v.x, y: v.y }
     }
 }
@@ -209,7 +209,7 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
 
         let mut path = vec![];
         for record in &def.shape.records {
-            let line = match record {
+            match record {
                 swf::ShapeRecord::StyleChange(change) => {
                     match change {
                         // Moving without changing styles stays within a path.
@@ -241,7 +241,7 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
                             .extend(new_styles.line.iter().map(StyledPath::new));
                     }
 
-                    if let Some(move_to) = change.move_to.as_ref().map(Point::from) {
+                    if let Some(move_to) = change.move_to.map(Point::from) {
                         pos = move_to;
                     }
                     if let Some(left_fill) = change.left_fill {
@@ -253,27 +253,18 @@ impl<'a> From<&'a swf::tags::DefineShape> for Shape<'a> {
                     if let Some(line_style) = change.line_style {
                         styles.stroke.set_from_swf(line_style);
                     }
-
-                    continue;
                 }
-                swf::ShapeRecord::StraightEdge(line) => Line {
-                    from: Point::default(),
-                    bezier_control: None,
-                    to: Point::from(&line.delta),
-                },
-                swf::ShapeRecord::CurvedEdge(bezier) => {
-                    let control = Point::from(&bezier.control_delta);
-                    Line {
+                swf::ShapeRecord::Edge(edge) => {
+                    let line = Line {
                         from: Point::default(),
-                        bezier_control: Some(control),
-                        to: control + Point::from(&bezier.anchor_delta),
-                    }
+                        bezier_control: edge.control_delta.map(Point::from),
+                        to: Point::from(edge.delta),
+                    };
+                    let line = line.map_points(|p| pos + p);
+                    path.push(line);
+                    pos = line.to;
                 }
             };
-
-            let line = line.map_points(|p| pos + p);
-            path.push(line);
-            pos = line.to;
         }
 
         shape.add_path(&path, styles);
