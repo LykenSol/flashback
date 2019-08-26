@@ -23,6 +23,9 @@ base64 = "0.10.0"
 doctest = false
 test = false
 
+[patch.'crates-io']
+swf-parser = { git = "https://github.com/LykenSol/swf-parser", branch = "flashback-hacks" }
+
 [workspace]
 members = [
     "web",

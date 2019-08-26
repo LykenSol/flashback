@@ -38,3 +38,6 @@ features = [
   'SvgScriptElement',
   'Window',
 ]
+
+[patch.'crates-io']
+swf-parser = { git = "https://github.com/LykenSol/swf-parser", branch = "flashback-hacks" }
