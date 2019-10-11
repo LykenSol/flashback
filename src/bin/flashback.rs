@@ -1,11 +1,17 @@
-use std::{env, fs, path::PathBuf};
+use std::{fs, path::PathBuf};
+use structopt::StructOpt;
+
+#[derive(Debug,StructOpt)]
+struct Opt{
+    #[structopt(long)]
+    use_js:bool,
+    #[structopt(required = true)]
+    files: Vec<PathBuf>,
+}
 
 fn main() {
-    if env::args().count() == 1 {
-        eprintln!("USAGE: flashback a.swf b.swf c.swf ...");
-    }
-    for arg in env::args().skip(1) {
-        let path = PathBuf::from(arg);
+    let opt = Opt::from_args();
+    for path in opt.files {
         let data = fs::read(&path).unwrap();
         eprint!("{}:", path.display());
         match swf_parser::parsers::movie::parse_movie(&data[..]) {
@@ -22,8 +28,7 @@ fn main() {
                 let document = flashback::export::svg::export(
                     &movie,
                     flashback::export::svg::Config {
-                        // TODO(eddyb) add a way to control this.
-                        use_js: true,
+                        use_js: opt.use_js,
                     },
                 );
                 svg::save(path.with_extension("svg"), &document).unwrap();
