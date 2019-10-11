@@ -18,6 +18,7 @@ svg = "0.5.12"
 image = "0.20.1"
 inflate = "0.4.4"
 base64 = "0.10.0"
+structopt = "0.3"
 
 [lib]
 doctest = false
