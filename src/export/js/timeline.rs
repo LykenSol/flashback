@@ -1,6 +1,6 @@
 use crate::export::js;
 use crate::timeline::{Depth, Frame, Timeline};
-use swf_tree as swf;
+use swf_types as swf;
 
 #[rustfmt::skip]
 pub fn export_matrix(m: &swf::Matrix) -> js::Code {

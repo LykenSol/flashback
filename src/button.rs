@@ -1,7 +1,7 @@
 use crate::dictionary::CharacterId;
 use crate::timeline::{Depth, Object};
 use std::collections::BTreeMap;
-use swf_tree as swf;
+use swf_types as swf;
 
 #[derive(Clone, Debug, Default)]
 pub struct PerState<T> {

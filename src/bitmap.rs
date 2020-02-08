@@ -1,5 +1,5 @@
 use image::{DynamicImage, Rgb, RgbImage, Rgba, RgbaImage};
-use swf_tree as swf;
+use swf_types as swf;
 
 pub struct Bitmap {
     pub image: DynamicImage,
@@ -8,8 +8,8 @@ pub struct Bitmap {
 impl<'a> From<&'a swf::tags::DefineBitmap> for Bitmap {
     fn from(bitmap: &swf::tags::DefineBitmap) -> Self {
         let has_alpha = match bitmap.media_type {
-            swf::ImageType::SwfBmp => false,
-            swf::ImageType::SwfAbmp => true,
+            swf::ImageType::SwfLossless1 => false,
+            swf::ImageType::SwfLossless2 => true,
             _ => {
                 eprintln!("Bitmap::from: unsupported type: {:?}", bitmap.media_type);
 
