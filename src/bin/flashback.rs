@@ -14,16 +14,8 @@ fn main() {
     for path in opt.files {
         let data = fs::read(&path).unwrap();
         eprint!("{}:", path.display());
-        match swf_parser::parsers::movie::parse_movie(&data[..]) {
-            Ok((remaining, movie)) => {
-                if !remaining.is_empty() {
-                    eprintln!(
-                        "swf-parser parsing incomplete: {} bytes left",
-                        remaining.len()
-                    );
-                } else {
-                    eprintln!("");
-                }
+        match swf_parser::parse_swf(&data) {
+            Ok(movie) => {
                 // println!("{:#?}", movie);
                 let document = flashback::export::svg::export(
                     &movie,

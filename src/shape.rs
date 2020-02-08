@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 use std::ops::{Add, Sub};
-use swf_tree as swf;
+use swf_types as swf;
 
 #[derive(Copy, Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Point {

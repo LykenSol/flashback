@@ -6,18 +6,8 @@ use wasm_bindgen_futures::{future_to_promise, JsFuture};
 use web_sys::{console, Element, Request, RequestInit, RequestMode, Response, SvgScriptElement};
 
 fn convert_swf(swf: &[u8]) -> String {
-    match swf_parser::parsers::movie::parse_movie(swf) {
-        Ok((remaining, movie)) => {
-            if !remaining.is_empty() {
-                console::log_1(
-                    &format!(
-                        "swf-parser parsing incomplete: {} bytes left",
-                        remaining.len()
-                    )
-                    .into(),
-                );
-            }
-
+    match swf_parser::parse_swf(&swf) {
+        Ok(movie) => {
             flashback::export::svg::export(&movie, flashback::export::svg::Config { use_js: true })
                 .to_string()
         }

@@ -4,7 +4,7 @@ use std::f64::consts::PI;
 use std::fmt::Write;
 use svg::node::element::{Animate, AnimateTransform, Element, Filter, Group, Use};
 use svg::Node;
-use swf_tree as swf;
+use swf_types as swf;
 
 struct Animation<T> {
     frame_count: Frame,

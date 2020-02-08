@@ -1,4 +1,4 @@
-use swf_tree as swf;
+use swf_types as swf;
 
 #[derive(Copy, Clone)]
 pub struct Mp3<'a> {

@@ -4,7 +4,7 @@ use crate::sound;
 use std::collections::BTreeMap;
 use std::ops::Add;
 use std::str;
-use swf_tree as swf;
+use swf_types as swf;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Depth(pub u16);

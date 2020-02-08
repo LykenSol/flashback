@@ -11,7 +11,7 @@ use svg::node::element::{
     path, ClipPath, Definitions, Group, Image, LinearGradient, Path, Pattern, RadialGradient,
     Rectangle, Script, Stop,
 };
-use swf_tree as swf;
+use swf_types as swf;
 
 mod animate;
 
